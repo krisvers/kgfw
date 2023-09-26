@@ -1,0 +1,14 @@
+#ifndef KRISVERS_KGFW_H
+#define KRISVERS_KGFW_H
+
+#include "kgfw_window.h"
+#include "kgfw_graphics.h"
+#include "kgfw_input.h"
+#include "kgfw_log.h"
+#include "kgfw_defines.h"
+
+KGFW_PUBLIC int kgfw_init(void);
+KGFW_PUBLIC void kgfw_deinit(void);
+KGFW_PUBLIC int kgfw_update(void);
+
+#endif

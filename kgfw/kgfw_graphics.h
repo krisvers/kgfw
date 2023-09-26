@@ -1,0 +1,6 @@
+#ifndef KRISVERS_KGFW_GRAPHICS_H
+#define KRISVERS_KGFW_GRAPHICS_H
+
+
+
+#endif
