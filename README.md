@@ -1,1 +1,1 @@
-# kgfw: a lightweight game framework written in C
+![kgfw logo](./rsrc/kgfw.png)
