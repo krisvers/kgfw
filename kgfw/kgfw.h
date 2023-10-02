@@ -5,6 +5,9 @@
 #include "kgfw_graphics.h"
 #include "kgfw_input.h"
 #include "kgfw_log.h"
+#include "kgfw_ecs.h"
+#include "kgfw_audio.h"
+#include "kgfw_console.h"
 #include "kgfw_defines.h"
 
 KGFW_PUBLIC int kgfw_init(void);

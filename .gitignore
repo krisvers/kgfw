@@ -5,3 +5,6 @@
 *.exe
 x64/
 x86/
+*.exp
+*.pdb
+*.ilk

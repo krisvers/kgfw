@@ -1,0 +1,3 @@
+[audio]
+as files = "assets/jeff.wav", "assets/cantina.wav";
+as names = "jeff", "cantina";

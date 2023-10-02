@@ -1,4 +1,5 @@
 #include "kgfw.h"
+#include "kgfw_input.h"
 #include <GLFW/glfw3.h>
 
 static void kgfw_glfw_window_close(GLFWwindow * glfw_window);
@@ -10,6 +11,10 @@ int kgfw_window_create(kgfw_window_t * out_window, unsigned int width, unsigned 
 	out_window->closed = 0;
 	out_window->internal = NULL;
 
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	out_window->internal = glfwCreateWindow(width, height, title, NULL, NULL);
 	if (out_window->internal == NULL) {
 		kgfw_log(KGFW_LOG_SEVERITY_ERROR, "GLFW window creation failed");
@@ -18,6 +23,10 @@ int kgfw_window_create(kgfw_window_t * out_window, unsigned int width, unsigned 
 	glfwSetWindowUserPointer(out_window->internal, (void *) out_window);
 	glfwSetWindowCloseCallback(out_window->internal, kgfw_glfw_window_close);
 	glfwSetWindowSizeCallback(out_window->internal, kgfw_glfw_window_resize);
+	if (kgfw_input_register_window(out_window) != 0) {
+		glfwDestroyWindow(out_window->internal);
+		return 2;
+	}
 
 	return 0;
 }
