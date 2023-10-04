@@ -8,6 +8,7 @@
 #include "kgfw_ecs.h"
 #include "kgfw_audio.h"
 #include "kgfw_console.h"
+#include "kgfw_commands.h"
 #include "kgfw_defines.h"
 
 KGFW_PUBLIC int kgfw_init(void);

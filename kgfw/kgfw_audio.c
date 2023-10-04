@@ -82,7 +82,7 @@ int kgfw_audio_init(void) {
 			NULL, 0
 	};
 	{
-		FILE * fp = fopen("assets/config.koml", "rb");
+		FILE * fp = fopen("./assets/config.koml", "rb");
 		if (fp == NULL) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to open \"config.koml\"");
 			return 1;
@@ -116,7 +116,6 @@ int kgfw_audio_init(void) {
 	state.buffers.length = 0;
 	if (files != NULL && files->type == KOML_TYPE_ARRAY && files->data.array.type == KOML_TYPE_STRING) {
 		state.buffers.length = files->data.array.length;
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "%llu", files->data.array.length);
 		state.buffers.bo = malloc(sizeof(ALuint) * files->data.array.length);
 		if (state.buffers.bo == NULL) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to alloc audio buffers");
@@ -206,7 +205,6 @@ int kgfw_audio_init(void) {
 					break;
 			}
 
-			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "%u %u %u %u %u %u", kwav.header.filesize, kwav.header.type, kwav.header.channels, kwav.header.rate, kwav.header.bits, kwav.header.datasize);
 			alBufferData(state.buffers.bo[i], format, kwav.data, kwav.header.datasize, kwav.header.rate);
 			AL_ERROR_CHECK(6);
 			free(file.buffer);
@@ -215,6 +213,120 @@ int kgfw_audio_init(void) {
 	} else {
 		kgfw_logf(KGFW_LOG_SEVERITY_WARN, "no config.koml with audio files");
 	}
+
+	return 0;
+}
+
+int kgfw_audio_load(char * filename, char * name) {
+	unsigned long long int hash = internal_hash(name);
+	for (unsigned long long int i = 0; i < state.buffers.length; ++i) {
+		if (state.buffers.names[i] == hash) {
+			return -1;
+		}
+	}
+
+	++state.buffers.length;
+	if (state.buffers.bo == NULL) {
+		state.buffers.bo = malloc(sizeof(ALuint) * state.buffers.length);
+		if (state.buffers.bo == NULL) {
+			return 1;
+		}
+	} else {
+		ALuint * p = realloc(state.buffers.bo, sizeof(ALuint) * state.buffers.length);
+		if (p == NULL) {
+			return 2;
+		}
+		state.buffers.bo = p;
+	}
+
+	if (state.buffers.names == NULL) {
+		state.buffers.names = malloc(sizeof(unsigned long long int) * state.buffers.length);
+		if (state.buffers.names == NULL) {
+			return 3;
+		}
+	} else {
+		unsigned long long int * p = realloc(state.buffers.names, sizeof(unsigned long long int) * state.buffers.length);
+		if (p == NULL) {
+			return 4;
+		}
+		state.buffers.names = p;
+	}
+
+	alGenBuffers(1, &state.buffers.bo[state.buffers.length - 1]);
+	AL_ERROR_CHECK(4);
+	state.buffers.names[state.buffers.length - 1] = hash;
+
+	struct {
+		ALvoid * buffer;
+		ALsizei size;
+	} file = {
+			NULL, 0
+	};
+	{
+		FILE * fp = fopen(filename, "rb");
+		if (fp == NULL) {
+			return 5;
+		}
+
+		fseek(fp, 0L, SEEK_END);
+		file.size = ftell(fp);
+		fseek(fp, 0L, SEEK_SET);
+
+		file.buffer = malloc(file.size);
+		if (file.buffer == NULL) {
+			return 6;
+		}
+
+		if (fread(file.buffer, 1, file.size, fp) != file.size) {
+			return 7;
+		}
+
+		fclose(fp);
+	}
+
+	kwav_t kwav;
+	memset(&kwav, 0, sizeof(kwav));
+
+	if (kwav_load(&kwav, file.buffer, file.size) != 0) {
+		return 8;
+	}
+	kwav.data = malloc(kwav.header.datasize);
+	if (kwav.data == NULL) {
+		return 9;
+	}
+	if (kwav_load(&kwav, file.buffer, file.size) != 0) {
+		return 10;
+	}
+	
+	ALenum format = AL_FALSE;
+	switch (kwav.header.channels) {
+		case 1:
+			if (kwav.header.bits == 8) {
+				format = AL_FORMAT_MONO8;
+				break;
+			}
+			if (kwav.header.bits == 16) {
+				format = AL_FORMAT_MONO16;
+				break;
+			}
+		case 2:
+			if (kwav.header.bits == 8) {
+				format = AL_FORMAT_STEREO8;
+				break;
+			}
+			if (kwav.header.bits == 16) {
+				format = AL_FORMAT_STEREO16;
+				break;
+			}
+		default:
+			return 11;
+	}
+	
+	kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "0x%x %u %u", format, kwav.header.datasize, kwav.header.rate);
+	alBufferData(state.buffers.bo[state.buffers.length - 1], format, kwav.data, kwav.header.datasize, kwav.header.rate);
+	AL_ERROR_CHECK(12);
+	free(file.buffer);
+	free(kwav.data);
 
 	return 0;
 }
