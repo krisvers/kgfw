@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <math.h>
-#include <unistd.h>
 #include "kgfw/kgfw.h"
+#ifndef KGFW_WINDOWS
+#include <unistd.h>
+#endif
 
 int kgfw_log_handler(kgfw_log_severity_enum severity, char * string) {
 	char * severity_strings[] = { "CONSOLE", "TRACE", "DEBUG", "INFO", "WARN", "ERROR" };
@@ -36,11 +38,13 @@ int main(int argc, char ** argv) {
 		return 1;
 	}
 
+	#ifndef KGFW_WINDOWS
 	if (argc > 1) {
 		if (chdir(argv[1]) != 0) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to chdir to %s", argv[1]);
 		}
 	}
+	#endif
 
 	kgfw_window_t window;
 	if (kgfw_window_create(&window, 800, 600, "hello, worl") != 0) {
