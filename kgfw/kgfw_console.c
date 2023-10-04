@@ -96,6 +96,11 @@ int kgfw_console_create_var(char * name, char * value) {
 
 		memcpy(p, value, len);
 		p[len] = '\0';
+		for (unsigned long long int i = 0; i < len; ++i) {
+			if (p[i] == '\'') {
+				p[i] = '"';
+			}
+		}
 	}
 
 	console_vars[console_vars_length++] = p;
@@ -128,6 +133,11 @@ int kgfw_console_set_var(char * name, char * value) {
 
 			memcpy(p, value, len);
 			p[len] = '\0';
+			for (unsigned long long int i = 0; i < len; ++i) {
+				if (p[i] == '\'') {
+					p[i] = '"';
+				}
+			}
 			return 0;
 		}
 	}
@@ -139,9 +149,9 @@ int kgfw_console_set_var(char * name, char * value) {
 
 struct {
 	char buffer[BUFFER_SIZE];
-	unsigned int length;
+	unsigned long long int length;
 	unsigned char shift;
-	unsigned int whitespaces;
+	unsigned long long int whitespaces;
 	unsigned char enabled;
 } state;
 
@@ -331,10 +341,10 @@ static void console_key_callback(kgfw_input_key_enum key, unsigned char action) 
 			state.whitespaces = 0;
 			return;
 		}
-		unsigned int argc = 0;
-		unsigned int last = 0;
+		unsigned long long int argc = 0;
+		unsigned long long int last = 0;
 
-		for (unsigned int i = 0; i < state.length; ++i) {
+		for (unsigned long long int i = 0; i < state.length; ++i) {
 			if (state.buffer[i] == '\"') {
 				state.buffer[i] = state.buffer[i + 1];
 				++i;
@@ -362,7 +372,6 @@ static void console_key_callback(kgfw_input_key_enum key, unsigned char action) 
 			}
 		}
 
-	end:
 		if (kgfw_console_run(argc, argv) != 0) {
 			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no command found \"%s\"", argv[0]);
 		}

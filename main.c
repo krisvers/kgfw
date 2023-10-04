@@ -5,6 +5,13 @@
 #include <unistd.h>
 #endif
 
+struct {
+	kgfw_window_t * window;
+	unsigned char input;
+} static state = {
+	NULL, 1
+};
+
 int kgfw_log_handler(kgfw_log_severity_enum severity, char * string) {
 	char * severity_strings[] = { "CONSOLE", "TRACE", "DEBUG", "INFO", "WARN", "ERROR" };
 	printf("[%s] %s\n", severity_strings[severity % 6], string);
