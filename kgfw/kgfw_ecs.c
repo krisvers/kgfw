@@ -85,13 +85,5 @@ void * kgfw_ecs_get(unsigned long long int id) {
 
 
 void kgfw_ecs_update(void) {
-	void * p = components;
-	kgfw_ecs_component_t * component = (kgfw_ecs_component_t *) p;
-	for (unsigned long long int i = 0; i < length; ++i) {
-		if (component->update(component) != 0) {
-			kgfw_logf(KGFW_LOG_SEVERITY_WARN, "component \"%s\" failed to update", names[i]);
-		}
-		p = (void *) (((unsigned long long int) p) + component->size);
-		component = (kgfw_ecs_component_t *) p;
-	}
+	
 }

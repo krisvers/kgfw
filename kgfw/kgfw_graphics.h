@@ -3,6 +3,7 @@
 
 #include "kgfw_defines.h"
 #include "kgfw_window.h"
+#include "kgfw_camera.h"
 
 typedef struct kgfw_graphics_vertex {
 	float x, y, z;
@@ -18,7 +19,7 @@ typedef struct kgfw_graphics_mesh {
 	unsigned long long int indices_count;
 } kgfw_graphics_mesh_t;
 
-KGFW_PUBLIC int kgfw_graphics_init(kgfw_window_t * window);
+KGFW_PUBLIC int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera, kgfw_graphics_mesh_t * mesh);
 KGFW_PUBLIC void kgfw_graphics_set_window(kgfw_window_t * window);
 KGFW_PUBLIC kgfw_window_t * kgfw_graphics_get_window(void);
 KGFW_PUBLIC void kgfw_graphics_draw(void);

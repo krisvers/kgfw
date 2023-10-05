@@ -162,6 +162,7 @@ unsigned char kgfw_console_is_input_enabled(void) {
 void kgfw_console_input_enable(unsigned char enabled) {
 	state.enabled = enabled;
 	if (state.enabled) {
+		state.length = 0;
 		kgfw_logc(KGFW_LOG_SEVERITY_CONSOLE, '>');
 		kgfw_logc(KGFW_LOG_SEVERITY_CONSOLE, ' ');
 	}

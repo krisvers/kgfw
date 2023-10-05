@@ -211,9 +211,15 @@ static int exec_command(int argc, char ** argv) {
 
 	unsigned long long int len = strlen(cvar) + 1;
 	unsigned long long int whitespaces = 0;
+	char * cpy = malloc(len + 1);
+	if (cpy == NULL) {
+		return 0;
+	}
+	memcpy(cpy, cvar, len);
+	cpy[len] = '\0';
 
 	for (unsigned long long int i = 0; i < len; ++i) {
-		if (cvar[i] == ' ' || cvar[i] == '\0') {
+		if (cpy[i] == ' ' || cpy[i] == '\0') {
 			++whitespaces;
 		}
 	}
@@ -228,35 +234,38 @@ static int exec_command(int argc, char ** argv) {
 	unsigned long long int last = 0;
 
 	for (unsigned long long int i = 0; i < len; ++i) {
-		if (cvar[i] == '\"') {
-			cvar[i] = cvar[i + 1];
+		if (cpy[i] == '\"') {
+			cpy[i] = cpy[i + 1];
 			++i;
-			while (cvar[i] != '\"') {
-				cvar[i] = cvar[i + 1];
+			while (cpy[i] != '\"') {
+				cpy[i] = cpy[i + 1];
 				++i;
 				if (i >= len) {
 					kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "console string literal never ended");
 					return 0;
 				}
 			}
-			cvar[i - 1] = '\0';
+			cpy[i - 1] = '\0';
 			continue;
 		}
 
-		if (cvar[i] == ' ' || cvar[i] == '\0') {
-			cvar[i] = '\0';
-			cargv[cargc++] = &cvar[last];
+		if (cpy[i] == ' ' || cpy[i] == '\0') {
+			cpy[i] = '\0';
+			cargv[cargc++] = &cpy[last];
 			last = i + 1;
 		}
 
-		if (cvar[i] == '\r') {
-			cvar[i] = '\n';
+		if (cpy[i] == '\r') {
+			cpy[i] = '\n';
 		}
 	}
 
 	if (kgfw_console_run(cargc, cargv) != 0) {
 		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no command found \"%s\"", cargv[0]);
 	}
+
+	free(cpy);
+	free(cargv);
 
 	return 0;
 }

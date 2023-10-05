@@ -4,9 +4,10 @@
 #include "kgfw_defines.h"
 
 #define KGFW_DEFAULT_COMPONENT_STATE_MEMBERS unsigned long long int size;
+
 #define KGFW_DEFAULT_COMPONENT_MEMBERS unsigned long long int size;	\
 	int (*init)(void * self, void * state);							\
-	int (*update)(void * self);
+	int (*update)(void * self, void * state);
 
 typedef struct kgfw_ecs_component {
 	KGFW_DEFAULT_COMPONENT_MEMBERS
