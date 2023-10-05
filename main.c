@@ -96,17 +96,23 @@ int main(int argc, char ** argv) {
 
 	{
 		kgfw_graphics_vertex_t vertices[] = {
-			{  0,  1, 0,	1, 1, 0 },
-			{ -1, -1, 0,	0, 1, 1 },
-			{  1, -1, 0,	1, 0, 1 },
+			{
+				 1.0f,  1.0f, -1.0f,	1.0f, 0.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0
+			},
+			{
+				-1.0f, -1.0f, -1.0f,	0.0f, 1.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0
+			},
+			{
+				-1.0f,  1.0f, -1.0f,	0.0f, 0.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	0, 0
+			}
 		};
 
 		unsigned int indices[] = {
-			1, 0, 2,
+			0, 1, 2,
 		};
 
 		kgfw_graphics_mesh_t mesh = {
-			vertices, 3, indices, 3,
+			vertices, sizeof(vertices) / sizeof(vertices[0]), indices, sizeof(indices) / sizeof(indices[0]),
 		};
 
 		kgfw_graphics_update(&mesh);

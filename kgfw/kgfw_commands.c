@@ -26,24 +26,24 @@ static int sound_command(int argc, char ** argv) {
 		float z = 0;
 		unsigned char relative = 1;
 		switch (argc) {
-			case 3:
-				gain = strtod(argv[2], NULL);
-				break;
 			case 4:
-				pitch = strtod(argv[3], NULL);
+				gain = strtod(argv[3], NULL);
 				break;
 			case 5:
-				x = strtod(argv[4], NULL);
+				pitch = strtod(argv[4], NULL);
 				break;
 			case 6:
-				y = strtod(argv[5], NULL);
+				x = strtod(argv[5], NULL);
 				break;
 			case 7:
-				z = strtod(argv[6], NULL);
+				y = strtod(argv[6], NULL);
+				break;
+			case 8:
+				z = strtod(argv[7], NULL);
 				break;
 			default:
-				if (argc >= 8) {
-					relative = (argv[7][0] == '1');
+				if (argc >= 9) {
+					relative = (argv[8][0] == '1');
 				}
 				break;
 		}
