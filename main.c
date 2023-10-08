@@ -12,7 +12,7 @@ struct {
 	unsigned char input;
 } static state = {
 	(kgfw_window_t) {},
-	(kgfw_camera_t) { { 0, 0, -5 }, { 0, 0, 0 }, 90, 0.01f, 1000.0f, 1.3333f, 1 },
+	(kgfw_camera_t) { { 0, 0, 0 }, { 0, 0, 0 }, 90, 0.01f, 1000.0f, 1.3333f, 1 },
 	1
 };
 
@@ -91,6 +91,16 @@ int player_movement_update(player_movement_t * self, player_movement_state_t * m
 	if (kgfw_input_key(KGFW_KEY_DOWN)) {
 		mstate->camera->rot[0] -= look_sensitivity;
 	}
+
+	if (mstate->camera->rot[0] > 360 || mstate->camera->rot[0] < 0) {
+		mstate->camera->rot[0] = fmod(mstate->camera->rot[0], 360);
+	}
+	if (mstate->camera->rot[1] > 360 || mstate->camera->rot[1] < 0) {
+		mstate->camera->rot[1] = fmod(mstate->camera->rot[1], 360);
+	}
+	if (mstate->camera->rot[2] > 360 || mstate->camera->rot[2] < 0) {
+		mstate->camera->rot[2] = fmod(mstate->camera->rot[2], 360);
+	}
 	
 	vec3 up;
 	vec3 right;
@@ -132,6 +142,7 @@ int main(int argc, char ** argv) {
 		return 1;
 	}
 
+	/* work-around for pylauncher bug */
 	#ifndef KGFW_WINDOWS
 	if (argc > 1) {
 		if (chdir(argv[1]) != 0) {
@@ -153,15 +164,15 @@ int main(int argc, char ** argv) {
 
 	{
 		kgfw_graphics_vertex_t vertices[] = {
-			{  1.0f,  1.0f, -1.0f,	1.0f, 0.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
-			{ -1.0f, -1.0f, -1.0f,	1.0f, 1.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
-			{ -1.0f,  1.0f, -1.0f,	1.0f, 0.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
-			{  1.0f, -1.0f, -1.0f,	1.0f, 1.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
+			{  1.0f,  1.0f, -1.0f,	1.0f, 1.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
+			{ -1.0f, -1.0f, -1.0f,	0.0f, 0.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
+			{ -1.0f,  1.0f, -1.0f,	0.0f, 1.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
+			{  1.0f, -1.0f, -1.0f,	1.0f, 0.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
 
-			{  1.0f,  1.0f,  1.0f,	0.0f, 1.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
-			{ -1.0f, -1.0f,  1.0f,	0.0f, 1.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
-			{ -1.0f,  1.0f,  1.0f,	1.0f, 1.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
-			{  1.0f, -1.0f,  1.0f,	1.0f, 1.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
+			{  1.0f,  1.0f,  1.0f,	1.0f, 1.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
+			{ -1.0f, -1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
+			{ -1.0f,  1.0f,  1.0f,	0.0f, 1.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
+			{  1.0f, -1.0f,  1.0f,	1.0f, 0.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
 		};
 
 		unsigned int indices[] = {
@@ -185,8 +196,11 @@ int main(int argc, char ** argv) {
 		};
 
 		kgfw_graphics_mesh_t mesh = {
-			vertices, sizeof(vertices) / sizeof(vertices[0]), indices, sizeof(indices) / sizeof(indices[0]),
+			vertices, sizeof(vertices) / sizeof(vertices[0]), indices, sizeof(indices) / sizeof(indices[0])
 		};
+		mesh.pos[0] = 0; mesh.pos[1] = 0; mesh.pos[2] = 5;
+		mesh.rot[0] = 0; mesh.rot[1] = 60; mesh.rot[2] = 30;
+		mesh.scale[0] = 3; mesh.scale[1] = 1; mesh.scale[2] = 1;
 
 		if (kgfw_graphics_init(&state.window, &state.camera, &mesh) != 0) {
 			kgfw_audio_deinit();
