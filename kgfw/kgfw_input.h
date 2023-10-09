@@ -145,6 +145,10 @@ KGFW_PUBLIC unsigned char kgfw_input_key(kgfw_input_key_enum key);
 KGFW_PUBLIC unsigned char kgfw_input_key_down(kgfw_input_key_enum key);
 /* returns if key was just depressed */
 KGFW_PUBLIC unsigned char kgfw_input_key_up(kgfw_input_key_enum key);
+/* outputs the difference between last frame's mouse position and the current frame's mouse position */
+KGFW_PUBLIC void kgfw_input_mouse_delta(float * out_dx, float * out_dy);
+/* outputs the current mouse position */
+KGFW_PUBLIC void kgfw_input_mouse_pos(float * out_dx, float * out_dy);
 /* register a callback for key input */
 KGFW_PUBLIC int kgfw_input_key_register_callback(kgfw_input_key_callback callback);
 

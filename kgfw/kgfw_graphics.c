@@ -17,21 +17,22 @@
 #define KGFW_GRAPHICS_DEFAULT_INDICES_COUNT 0
 
 typedef struct mesh_node {
-	GLuint vbo;
-	GLuint ibo;
-	GLuint program;
-
-	unsigned long long int vbo_size;
-	unsigned long long int ibo_size;
-
 	struct {
 		float pos[3];
 		float rot[3];
 		float scale[3];
 	} transform;
 
+	struct mesh_node * parent;
 	struct mesh_node * child;
 	struct mesh_node * sibling;
+
+	GLuint vbo;
+	GLuint ibo;
+	GLuint program;
+
+	unsigned long long int vbo_size;
+	unsigned long long int ibo_size;
 } mesh_node_t;
 
 struct {
@@ -57,7 +58,7 @@ struct {
 } static state = {
 	NULL, NULL,
 	0, 0, 0, 0, 0, 0, 0, 0, 0,
-	{  },
+	{ 0 },
 	NULL,
 	0, 0, 0, 0,
 };
@@ -75,6 +76,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera, kgfw_grap
 	if (window != NULL) {
 		if (window->internal != NULL) {
 			glfwMakeContextCurrent(window->internal);
+			glfwSwapInterval(0);
 		}
 	}
 
@@ -96,7 +98,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera, kgfw_grap
 
 		const GLchar * fallback_fshader =
 			"#version 330 core\n"
-			"in vec3 v_pos; in vec3 v_color; out vec4 out_color; void main() vec3 lawdkwkkd  { out_color = vec4(v_color, 1); }";
+			"in vec3 v_pos; in vec3 v_color; out vec4 out_color; void main() { out_color = vec4(v_color, 1); }";
 
 		GLchar * vshader = (GLchar *) fallback_vshader;
 		GLchar * fshader = (GLchar *) fallback_fshader;
@@ -282,10 +284,10 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera, kgfw_grap
 		mat4x4_scale_aniso(state.static_model, state.static_model, mesh->scale[0], mesh->scale[1], mesh->scale[2]);
 	}
 
- 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, x));
- 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, r));
- 	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, nx));
- 	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, u));
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, x));
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, r));
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, nx));
+	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, u));
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
 	glEnableVertexAttribArray(2);
@@ -356,10 +358,46 @@ void kgfw_graphics_set_window(kgfw_window_t * window) {
 	}
 }
 
+void kgfw_graphics_viewport(unsigned int width, unsigned int height) {
+	glViewport(0, 0, width, height);
+}
+
 kgfw_window_t * kgfw_graphics_get_window(void) {
 	return state.window;
 }
 
 void kgfw_graphics_deinit(void) {
 	
+}
+
+mesh_node_t * meshes_alloc(void) {
+	mesh_node_t * m = malloc(sizeof(mesh_node_t));
+	if (m == NULL) {
+		return NULL;
+	}
+
+	memset(m, 0, sizeof(*m));
+	m->transform.scale[0] = 1;
+	m->transform.scale[1] = 1;
+	m->transform.scale[2] = 1;
+	return m;
+}
+
+void meshes_free(mesh_node_t * node) {
+	free(node);
+}
+
+void meshes_gen(mesh_node_t * node) {
+	glGenBuffers(1, &node->vbo);
+	glGenBuffers(1, &node->ibo);
+}
+
+mesh_node_t * meshes_new(void) {
+	mesh_node_t * m = meshes_alloc();
+	if (m == NULL) {
+		return NULL;
+	}
+
+	meshes_gen(m);
+	return m;
 }

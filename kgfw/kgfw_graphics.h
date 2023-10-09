@@ -23,10 +23,23 @@ typedef struct kgfw_graphics_mesh {
 	float scale[3];
 } kgfw_graphics_mesh_t;
 
+typedef struct kgfw_graphics_mesh_node {
+	struct {
+		float pos[3];
+		float rot[3];
+		float scale[3];
+	} transform;
+
+	struct kgfw_graphics_mesh_node * parent;
+	struct kgfw_graphics_mesh_node * child;
+	struct kgfw_graphics_mesh_node * sibling;
+} kgfw_graphics_mesh_node_t;
+
 KGFW_PUBLIC int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera, kgfw_graphics_mesh_t * mesh);
 KGFW_PUBLIC void kgfw_graphics_set_window(kgfw_window_t * window);
 KGFW_PUBLIC kgfw_window_t * kgfw_graphics_get_window(void);
 KGFW_PUBLIC void kgfw_graphics_draw(void);
+KGFW_PUBLIC void kgfw_graphics_viewport(unsigned int width, unsigned int height);
 KGFW_PUBLIC void * kgfw_graphics_mesh_upload(kgfw_graphics_mesh_t * mesh);
 KGFW_PUBLIC void kgfw_graphics_deinit(void);
 

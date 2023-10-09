@@ -10,40 +10,16 @@ struct {
 	kgfw_window_t window;
 	kgfw_camera_t camera;
 	unsigned char input;
+	unsigned char exit;
 } static state = {
-	(kgfw_window_t) {},
-	(kgfw_camera_t) { { 0, 0, 0 }, { 0, 0, 0 }, 90, 0.01f, 1000.0f, 1.3333f, 1 },
-	1
+	{ 0 },
+	{ { 0, 0, 0 }, { 0, 0, 0 }, 90, 0.01f, 1000.0f, 1.3333f, 1 },
+	1, 0
 };
 
-int kgfw_log_handler(kgfw_log_severity_enum severity, char * string) {
-	char * severity_strings[] = { "CONSOLE", "TRACE", "DEBUG", "INFO", "WARN", "ERROR" };
-	printf("[%s] %s\n", severity_strings[severity % 6], string);
-
-	return 0;
-}
-
-int kgfw_logc_handler(kgfw_log_severity_enum severity, char character) {
-	putc(character, stdout);
-	fflush(stdout);
-
-	return 0;
-}
-
-void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
-	if (key == KGFW_KEY_GRAVE && action == 1) {
-		unsigned char enabled = kgfw_console_is_input_enabled();
-		state.input = enabled;
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "console input %sabled", !enabled ? "en" : "dis");
-		kgfw_console_input_enable(!enabled);
-	}
-	if (state.input) {
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "key pressed: ('%c') %i %u", key, key, action);
-		if (key == KGFW_KEY_B && action == 1) {
-			kgfw_audio_play_sound("cantina", 0, 0, 0, 0.25, 1, 0, 0);
-		}
-	}
-}
+static int kgfw_log_handler(kgfw_log_severity_enum severity, char * string);
+static int kgfw_logc_handler(kgfw_log_severity_enum severity, char character);
+static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action);
 
 typedef struct player_movement {
 	KGFW_DEFAULT_COMPONENT_MEMBERS
@@ -54,86 +30,9 @@ typedef struct player_movement_state {
 	kgfw_camera_t * camera;
 } player_movement_state_t;
 
-int player_movement_init(player_movement_t * self, player_movement_state_t * mstate) {
-	return 0;
-}
-
-int player_movement_update(player_movement_t * self, player_movement_state_t * mstate) {
-	if (!state.input) {
-		return 0;
-	}
-
-	float move_speed = 0.5f;
-	float move_slow_speed = 0.125f;
-	float look_sensitivity = 3.0f;
-	float look_slow_sensitivity = 1.0f;
-
-	if (kgfw_input_key(
-		#ifndef KGFW_APPLE_MACOS
-		KGFW_KEY_LCONTROL
-		#else
-		KGFW_KEY_LALT
-		#endif
-	)) {
-		move_speed = move_slow_speed;
-		look_sensitivity = look_slow_sensitivity;
-	}
-
-	if (kgfw_input_key(KGFW_KEY_RIGHT)) {
-		mstate->camera->rot[1] += look_sensitivity;
-	}
-	if (kgfw_input_key(KGFW_KEY_LEFT)) {
-		mstate->camera->rot[1] -= look_sensitivity;
-	}
-	if (kgfw_input_key(KGFW_KEY_UP)) {
-		mstate->camera->rot[0] += look_sensitivity;
-	}
-	if (kgfw_input_key(KGFW_KEY_DOWN)) {
-		mstate->camera->rot[0] -= look_sensitivity;
-	}
-
-	if (mstate->camera->rot[0] > 360 || mstate->camera->rot[0] < 0) {
-		mstate->camera->rot[0] = fmod(mstate->camera->rot[0], 360);
-	}
-	if (mstate->camera->rot[1] > 360 || mstate->camera->rot[1] < 0) {
-		mstate->camera->rot[1] = fmod(mstate->camera->rot[1], 360);
-	}
-	if (mstate->camera->rot[2] > 360 || mstate->camera->rot[2] < 0) {
-		mstate->camera->rot[2] = fmod(mstate->camera->rot[2], 360);
-	}
-	
-	vec3 up;
-	vec3 right;
-	vec3 forward;
-	up[0] = 0; up[1] = 1; up[2] = 0;
-	right[0] = 0; right[1] = 0; right[2] = 0;
-	forward[0] = sinf(mstate->camera->rot[1] * 3.141592f / 180.0f); forward[1] = 0; forward[2] = cosf(mstate->camera->rot[1] * 3.141592f / 180.0f);
-	vec3_mul_cross(right, up, forward);
-	vec3_scale(up, up, move_speed);
-	vec3_scale(right, right, move_speed);
-	vec3_scale(forward, forward, move_speed);
-
-	if (kgfw_input_key(KGFW_KEY_W)) {
-		vec3_add(mstate->camera->pos, mstate->camera->pos, forward);
-	}
-	if (kgfw_input_key(KGFW_KEY_S)) {
-		vec3_sub(mstate->camera->pos, mstate->camera->pos, forward);
-	}
-	if (kgfw_input_key(KGFW_KEY_D)) {
-		vec3_add(mstate->camera->pos, mstate->camera->pos, right);
-	}
-	if (kgfw_input_key(KGFW_KEY_A)) {
-		vec3_sub(mstate->camera->pos, mstate->camera->pos, right);
-	}
-	if (kgfw_input_key(KGFW_KEY_E)) {
-		vec3_add(mstate->camera->pos, mstate->camera->pos, up);
-	}
-	if (kgfw_input_key(KGFW_KEY_Q)) {
-		vec3_sub(mstate->camera->pos, mstate->camera->pos, up);
-	}
-
-	return 0;
-}
+static int player_movement_init(player_movement_t * self, player_movement_state_t * mstate);
+static int player_movement_update(player_movement_t * self, player_movement_state_t * mstate);
+static int exit_command(int argc, char ** argv);
 
 int main(int argc, char ** argv) {
 	kgfw_log_register_callback(kgfw_log_handler);
@@ -218,6 +117,9 @@ int main(int argc, char ** argv) {
 		return 4;
 	}
 
+	kgfw_console_register_command("exit", exit_command);
+	kgfw_console_register_command("quit", exit_command);
+
 	if (kgfw_commands_init() != 0) {
 		kgfw_console_deinit();
 		kgfw_graphics_deinit();
@@ -246,24 +148,44 @@ int main(int argc, char ** argv) {
 
 	mov->init(mov, &mov_state);
 
-	while (!state.window.closed) {
+	while (!state.window.closed && !state.exit) {
 		kgfw_graphics_draw();
 
 		if (kgfw_window_update(&state.window) != 0) {
+			state.exit = 1;
 			break;
 		}
 
 		kgfw_ecs_update();
 
-		if (kgfw_update() != 0) {
-			break;
+		{
+			unsigned int w = state.window.width;
+			unsigned int h = state.window.height;
+			if (kgfw_update() != 0) {
+				state.exit = 1;
+				break;
+			}
+			if (w != state.window.width || h != state.window.height) {
+				kgfw_graphics_viewport(state.window.width, state.window.height);
+				state.camera.ratio = state.window.width / (float)state.window.height;
+			}
 		}
 
 		if (kgfw_input_key(KGFW_KEY_ESCAPE)) {
+			state.exit = 1;
 			break;
 		}
 		
 		mov->update(mov, &mov_state);
+		if (mov_state.camera->rot[0] > 360 || mov_state.camera->rot[0] < 0) {
+			mov_state.camera->rot[0] = fmod(mov_state.camera->rot[0], 360);
+		}
+		if (mov_state.camera->rot[1] > 360 || mov_state.camera->rot[1] < 0) {
+			mov_state.camera->rot[1] = fmod(mov_state.camera->rot[1], 360);
+		}
+		if (mov_state.camera->rot[2] > 360 || mov_state.camera->rot[2] < 0) {
+			mov_state.camera->rot[2] = fmod(mov_state.camera->rot[2], 360);
+		}
 
 		kgfw_input_update();
 		kgfw_audio_update();
@@ -275,6 +197,125 @@ int main(int argc, char ** argv) {
 	kgfw_audio_deinit();
 	kgfw_window_destroy(&state.window);
 	kgfw_deinit();
+
+	return 0;
+}
+
+static int kgfw_log_handler(kgfw_log_severity_enum severity, char * string) {
+	char * severity_strings[] = { "CONSOLE", "TRACE", "DEBUG", "INFO", "WARN", "ERROR" };
+	printf("[%s] %s\n", severity_strings[severity % 6], string);
+
+	return 0;
+}
+
+static int kgfw_logc_handler(kgfw_log_severity_enum severity, char character) {
+	putc(character, stdout);
+	fflush(stdout);
+
+	return 0;
+}
+
+static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
+	if (key == KGFW_KEY_GRAVE && action == 1) {
+		unsigned char enabled = kgfw_console_is_input_enabled();
+		state.input = enabled;
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "console input %sabled", !enabled ? "en" : "dis");
+		kgfw_console_input_enable(!enabled);
+	}
+	if (state.input) {
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "key pressed: ('%c') %i %u", key, key, action);
+		if (key == KGFW_KEY_B && action == 1) {
+			kgfw_audio_play_sound("cantina", 0, 0, 0, 0.25, 1, 0, 0);
+		}
+	}
+}
+
+static int player_movement_init(player_movement_t * self, player_movement_state_t * mstate) {
+	return 0;
+}
+
+static int player_movement_update(player_movement_t * self, player_movement_state_t * mstate) {
+	if (!state.input) {
+		return 0;
+	}
+
+	float move_speed = 0.5f;
+	float move_slow_speed = 0.125f;
+	float look_sensitivity = 3.0f;
+	float look_slow_sensitivity = 1.0f;
+	float mouse_sensitivity = 0.15f;
+
+	if (kgfw_input_key(
+	#ifndef KGFW_APPLE_MACOS
+		KGFW_KEY_LCONTROL
+	#else
+		KGFW_KEY_LALT
+	#endif
+	)) {
+		move_speed = move_slow_speed;
+		look_sensitivity = look_slow_sensitivity;
+	}
+
+	if (kgfw_input_key(KGFW_KEY_RIGHT)) {
+		mstate->camera->rot[1] += look_sensitivity;
+	}
+	if (kgfw_input_key(KGFW_KEY_LEFT)) {
+		mstate->camera->rot[1] -= look_sensitivity;
+	}
+	if (kgfw_input_key(KGFW_KEY_UP)) {
+		mstate->camera->rot[0] += look_sensitivity;
+	}
+	if (kgfw_input_key(KGFW_KEY_DOWN)) {
+		mstate->camera->rot[0] -= look_sensitivity;
+	}
+
+	float dx, dy;
+	kgfw_input_mouse_delta(&dx, &dy);
+	mstate->camera->rot[0] += dy * mouse_sensitivity;
+	mstate->camera->rot[1] -= dx * mouse_sensitivity;
+
+	if (mstate->camera->rot[0] > 85) {
+		mstate->camera->rot[0] = 85;
+	}
+	if (mstate->camera->rot[0] < -85) {
+		mstate->camera->rot[0] = -85;
+	}
+
+	vec3 up;
+	vec3 right;
+	vec3 forward;
+	up[0] = 0; up[1] = 1; up[2] = 0;
+	right[0] = 0; right[1] = 0; right[2] = 0;
+	forward[0] = sinf(mstate->camera->rot[1] * 3.141592f / 180.0f); forward[1] = 0; forward[2] = cosf(mstate->camera->rot[1] * 3.141592f / 180.0f);
+	vec3_mul_cross(right, up, forward);
+	vec3_scale(up, up, move_speed);
+	vec3_scale(right, right, move_speed);
+	vec3_scale(forward, forward, move_speed);
+
+	if (kgfw_input_key(KGFW_KEY_W)) {
+		vec3_add(mstate->camera->pos, mstate->camera->pos, forward);
+	}
+	if (kgfw_input_key(KGFW_KEY_S)) {
+		vec3_sub(mstate->camera->pos, mstate->camera->pos, forward);
+	}
+	if (kgfw_input_key(KGFW_KEY_D)) {
+		vec3_add(mstate->camera->pos, mstate->camera->pos, right);
+	}
+	if (kgfw_input_key(KGFW_KEY_A)) {
+		vec3_sub(mstate->camera->pos, mstate->camera->pos, right);
+	}
+	if (kgfw_input_key(KGFW_KEY_E)) {
+		vec3_add(mstate->camera->pos, mstate->camera->pos, up);
+	}
+	if (kgfw_input_key(KGFW_KEY_Q)) {
+		vec3_sub(mstate->camera->pos, mstate->camera->pos, up);
+	}
+
+	return 0;
+}
+
+static int exit_command(int argc, char ** argv) {
+	state.exit = 1;
 
 	return 0;
 }
