@@ -182,13 +182,6 @@ static int new_command(int argc, char ** argv) {
 	return 0;
 }
 
-const char * command_names = "help    sound    log    set    get    new    exec";
-
-static int help_command(int argc, char ** argv) {
-	kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "commands:    %s", command_names);
-	return 0;
-}
-
 static int test_command(int argc, char ** argv) {
 	for (int i = 0; i < argc; ++i) {
 		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "%i: \"%s\"", i, argv[i]);
@@ -271,7 +264,6 @@ static int exec_command(int argc, char ** argv) {
 }
 
 int kgfw_commands_init(void) {
-	kgfw_console_register_command("help", help_command);
 	kgfw_console_register_command("sound", sound_command);
 	kgfw_console_register_command("log", log_command);
 	kgfw_console_register_command("set", set_command);

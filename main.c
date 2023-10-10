@@ -107,6 +107,8 @@ int main(int argc, char ** argv) {
 			kgfw_deinit();
 			return 3;
 		}
+
+		//kgfw_graphics_mesh_new(&mesh, NULL);
 	}
 
 	if (kgfw_console_init() != 0) {
@@ -149,11 +151,16 @@ int main(int argc, char ** argv) {
 	mov->init(mov, &mov_state);
 
 	while (!state.window.closed && !state.exit) {
+		kgfw_time_start();
 		kgfw_graphics_draw();
 
 		if (kgfw_window_update(&state.window) != 0) {
 			state.exit = 1;
 			break;
+		}
+		kgfw_time_end();
+		if (state.input) {
+			//kgfw_logf(KGFW_LOG_SEVERITY_INFO, "frame time: %f    fps: %f", kgfw_time_delta(), 1 / kgfw_time_delta());
 		}
 
 		kgfw_ecs_update();
@@ -223,7 +230,7 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 		kgfw_console_input_enable(!enabled);
 	}
 	if (state.input) {
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "key pressed: ('%c') %i %u", key, key, action);
+		//kgfw_logf(KGFW_LOG_SEVERITY_INFO, "key pressed: ('%c') %i %u", key, key, action);
 		if (key == KGFW_KEY_B && action == 1) {
 			kgfw_audio_play_sound("cantina", 0, 0, 0, 0.25, 1, 0, 0);
 		}
@@ -239,11 +246,12 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 		return 0;
 	}
 
-	float move_speed = 0.5f;
-	float move_slow_speed = 0.125f;
-	float look_sensitivity = 3.0f;
-	float look_slow_sensitivity = 1.0f;
-	float mouse_sensitivity = 0.15f;
+	float move_speed = 25.0f;
+	float move_slow_speed = 10.0f;
+	float look_sensitivity = 150.0f;
+	float look_slow_sensitivity = 50.0f;
+	float mouse_sensitivity = 0.3f;
+	float delta = kgfw_time_delta();
 
 	if (kgfw_input_key(
 	#ifndef KGFW_APPLE_MACOS
@@ -257,16 +265,16 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 	}
 
 	if (kgfw_input_key(KGFW_KEY_RIGHT)) {
-		mstate->camera->rot[1] += look_sensitivity;
+		mstate->camera->rot[1] += look_sensitivity * delta;
 	}
 	if (kgfw_input_key(KGFW_KEY_LEFT)) {
-		mstate->camera->rot[1] -= look_sensitivity;
+		mstate->camera->rot[1] -= look_sensitivity * delta;
 	}
 	if (kgfw_input_key(KGFW_KEY_UP)) {
-		mstate->camera->rot[0] += look_sensitivity;
+		mstate->camera->rot[0] += look_sensitivity * delta;
 	}
 	if (kgfw_input_key(KGFW_KEY_DOWN)) {
-		mstate->camera->rot[0] -= look_sensitivity;
+		mstate->camera->rot[0] -= look_sensitivity * delta;
 	}
 
 	float dx, dy;
@@ -274,11 +282,11 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 	mstate->camera->rot[0] += dy * mouse_sensitivity;
 	mstate->camera->rot[1] -= dx * mouse_sensitivity;
 
-	if (mstate->camera->rot[0] > 85) {
-		mstate->camera->rot[0] = 85;
+	if (mstate->camera->rot[0] > 90) {
+		mstate->camera->rot[0] = 90;
 	}
-	if (mstate->camera->rot[0] < -85) {
-		mstate->camera->rot[0] = -85;
+	if (mstate->camera->rot[0] < -90) {
+		mstate->camera->rot[0] = -90;
 	}
 
 	vec3 up;
@@ -288,9 +296,9 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 	right[0] = 0; right[1] = 0; right[2] = 0;
 	forward[0] = sinf(mstate->camera->rot[1] * 3.141592f / 180.0f); forward[1] = 0; forward[2] = cosf(mstate->camera->rot[1] * 3.141592f / 180.0f);
 	vec3_mul_cross(right, up, forward);
-	vec3_scale(up, up, move_speed);
-	vec3_scale(right, right, move_speed);
-	vec3_scale(forward, forward, move_speed);
+	vec3_scale(up, up, move_speed * delta);
+	vec3_scale(right, right, move_speed * delta);
+	vec3_scale(forward, forward, move_speed * delta);
 
 	if (kgfw_input_key(KGFW_KEY_W)) {
 		vec3_add(mstate->camera->pos, mstate->camera->pos, forward);

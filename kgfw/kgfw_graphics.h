@@ -28,19 +28,43 @@ typedef struct kgfw_graphics_mesh_node {
 		float pos[3];
 		float rot[3];
 		float scale[3];
+		unsigned char absolute;
 	} transform;
 
 	struct kgfw_graphics_mesh_node * parent;
 	struct kgfw_graphics_mesh_node * child;
 	struct kgfw_graphics_mesh_node * sibling;
+
+	struct {
+		unsigned int _a;
+		unsigned int _b;
+		unsigned int _c;
+
+		unsigned long long int _d;
+		unsigned long long int _e;
+	} _internal;
 } kgfw_graphics_mesh_node_t;
+
+typedef enum kgfw_graphics_settings_action {
+	KGFW_GRAPHICS_SETTINGS_ACTION_SET = 1,
+	KGFW_GRAPHICS_SETTINGS_ACTION_ENABLE,
+	KGFW_GRAPHICS_SETTINGS_ACTION_DISABLE,
+} kgfw_graphics_settings_action_enum;
+
+typedef enum kgfw_graphics_settings {
+	KGFW_GRAPHICS_SETTINGS_VSYNC = 1,
+} kgfw_graphics_settings_enum;
+
+#define KGFW_GRAPHICS_SETTINGS_DEFAULT (0)
 
 KGFW_PUBLIC int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera, kgfw_graphics_mesh_t * mesh);
 KGFW_PUBLIC void kgfw_graphics_set_window(kgfw_window_t * window);
 KGFW_PUBLIC kgfw_window_t * kgfw_graphics_get_window(void);
 KGFW_PUBLIC void kgfw_graphics_draw(void);
 KGFW_PUBLIC void kgfw_graphics_viewport(unsigned int width, unsigned int height);
-KGFW_PUBLIC void * kgfw_graphics_mesh_upload(kgfw_graphics_mesh_t * mesh);
+KGFW_PUBLIC kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, kgfw_graphics_mesh_node_t * parent);
 KGFW_PUBLIC void kgfw_graphics_deinit(void);
+KGFW_PUBLIC void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsigned int settings);
+KGFW_PUBLIC unsigned int kgfw_graphics_settings_get(void);
 
 #endif

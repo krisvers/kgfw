@@ -7,27 +7,33 @@
 
 static void console_key_callback(kgfw_input_key_enum key, unsigned char action);
 static unsigned long long int internal_hash(char * string);
+static int help_command(int argc, char ** argv);
 
 #define COMMAND_NUM 512
 #define VAR_NUM 512
 
-kgfw_console_command_callback commands[COMMAND_NUM];
-unsigned long long int command_hashes[COMMAND_NUM];
-unsigned long long int commands_length = 0;
+static kgfw_console_command_callback commands[COMMAND_NUM];
+static unsigned long long int command_hashes[COMMAND_NUM];
+static char * command_names[COMMAND_NUM];
+static unsigned long long int commands_length = 0;
 
-unsigned long long int console_var_hashes[VAR_NUM];
-char * console_vars[VAR_NUM];
-unsigned long long int console_vars_length = 0;
+static unsigned long long int console_var_hashes[VAR_NUM];
+static char * console_vars[VAR_NUM];
+static unsigned long long int console_vars_length = 0;
 
 int kgfw_console_init(void) {
 	if (kgfw_input_key_register_callback(console_key_callback) != 0) {
 		return 1;
 	}
+	kgfw_console_register_command("help", help_command);
 
 	return 0;
 }
 
 void kgfw_console_deinit(void) {
+	for (unsigned long long int i = 0; i < commands_length; ++i) {
+		free(command_names[i]);
+	}
 	for (unsigned long long int i = 0; i < console_vars_length; ++i) {
 		if (console_vars[i] != NULL) {
 			free(console_vars[i]);
@@ -59,6 +65,14 @@ int kgfw_console_register_command(char * name, kgfw_console_command_callback com
 
 	commands[commands_length++] = command;
 	command_hashes[commands_length - 1] = internal_hash(name);
+	unsigned long long int len = strlen(name);
+	command_names[commands_length - 1] = malloc(len + 1);
+	if (command_names[commands_length - 1] == NULL) {
+		--commands_length;
+		return 1;
+	}
+	strncpy(command_names[commands_length - 1], name, len);
+	command_names[commands_length - 1][len] = '\0';
 
 	return 0;
 }
@@ -391,4 +405,12 @@ static unsigned long long int internal_hash(char * string) {
 	}
 
 	return hash;
+}
+
+static int help_command(int argc, char ** argv) {
+	for (unsigned long long int i = 0; i < commands_length; ++i) {
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "%s", command_names[i]);
+	}
+
+	return 0;
 }

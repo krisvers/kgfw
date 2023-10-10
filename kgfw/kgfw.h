@@ -6,6 +6,7 @@
 #include "kgfw_input.h"
 #include "kgfw_log.h"
 #include "kgfw_ecs.h"
+#include "kgfw_time.h"
 #include "kgfw_audio.h"
 #include "kgfw_console.h"
 #include "kgfw_commands.h"

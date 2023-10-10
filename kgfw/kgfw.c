@@ -9,6 +9,7 @@ int kgfw_init(void) {
 	if (glfwInit() != GLFW_TRUE) {
 		return 1;
 	}
+	glfwSetTime(0);
 
 	return 0;
 }
