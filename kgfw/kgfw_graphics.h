@@ -39,9 +39,10 @@ typedef struct kgfw_graphics_mesh_node {
 		unsigned int _a;
 		unsigned int _b;
 		unsigned int _c;
+		unsigned int _d;
 
-		unsigned long long int _d;
 		unsigned long long int _e;
+		unsigned long long int _f;
 	} _internal;
 } kgfw_graphics_mesh_node_t;
 
@@ -57,7 +58,7 @@ typedef enum kgfw_graphics_settings {
 
 #define KGFW_GRAPHICS_SETTINGS_DEFAULT (0)
 
-KGFW_PUBLIC int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera, kgfw_graphics_mesh_t * mesh);
+KGFW_PUBLIC int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera);
 KGFW_PUBLIC void kgfw_graphics_set_window(kgfw_window_t * window);
 KGFW_PUBLIC kgfw_window_t * kgfw_graphics_get_window(void);
 KGFW_PUBLIC void kgfw_graphics_draw(void);

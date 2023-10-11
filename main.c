@@ -98,17 +98,25 @@ int main(int argc, char ** argv) {
 			vertices, sizeof(vertices) / sizeof(vertices[0]), indices, sizeof(indices) / sizeof(indices[0])
 		};
 		mesh.pos[0] = 0; mesh.pos[1] = 0; mesh.pos[2] = 5;
-		mesh.rot[0] = 0; mesh.rot[1] = 60; mesh.rot[2] = 30;
-		mesh.scale[0] = 3; mesh.scale[1] = 1; mesh.scale[2] = 1;
+		mesh.rot[0] = 0; mesh.rot[1] = 0; mesh.rot[2] = 0;
+		mesh.scale[0] = 1; mesh.scale[1] = 1; mesh.scale[2] = 1;
 
-		if (kgfw_graphics_init(&state.window, &state.camera, &mesh) != 0) {
+		if (kgfw_graphics_init(&state.window, &state.camera) != 0) {
 			kgfw_audio_deinit();
 			kgfw_window_destroy(&state.window);
 			kgfw_deinit();
 			return 3;
 		}
 
-		//kgfw_graphics_mesh_new(&mesh, NULL);
+		kgfw_graphics_mesh_new(&mesh, kgfw_graphics_mesh_new(&mesh, kgfw_graphics_mesh_new(&mesh, NULL)));
+		mesh.pos[0] += 4;
+		kgfw_graphics_mesh_new(&mesh, NULL);
+		mesh.pos[0] += 4;
+		kgfw_graphics_mesh_new(&mesh, NULL);
+		mesh.pos[0] += 4;
+		kgfw_graphics_mesh_new(&mesh, NULL);
+		mesh.pos[0] += 4;
+		kgfw_graphics_mesh_new(&mesh, NULL);
 	}
 
 	if (kgfw_console_init() != 0) {
@@ -159,9 +167,6 @@ int main(int argc, char ** argv) {
 			break;
 		}
 		kgfw_time_end();
-		if (state.input) {
-			//kgfw_logf(KGFW_LOG_SEVERITY_INFO, "frame time: %f    fps: %f", kgfw_time_delta(), 1 / kgfw_time_delta());
-		}
 
 		kgfw_ecs_update();
 
@@ -196,6 +201,10 @@ int main(int argc, char ** argv) {
 
 		kgfw_input_update();
 		kgfw_audio_update();
+		kgfw_time_end();
+		if (state.input) {
+			//kgfw_logf(KGFW_LOG_SEVERITY_INFO, "frame time: %f    fps: %f", kgfw_time_delta(), 1 / kgfw_time_delta());
+		}
 	}
 
 	kgfw_console_deinit();

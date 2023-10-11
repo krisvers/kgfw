@@ -21,7 +21,7 @@
 #define GL_CALL(statement) statement; GL_CHECK_ERROR()
 #else
 #define GL_CHECK_ERROR()
-#define GL_CALL(statement) { statement; }
+#define GL_CALL(statement) statement;
 #endif
 
 typedef struct mesh_node {
@@ -37,6 +37,7 @@ typedef struct mesh_node {
 	struct mesh_node * sibling;
 
 	struct {
+		GLuint vao;
 		GLuint vbo;
 		GLuint ibo;
 		GLuint program;
@@ -49,37 +50,28 @@ typedef struct mesh_node {
 struct {
 	kgfw_window_t * window;
 	kgfw_camera_t * camera;
-	GLuint vbo;
-	GLuint ibo;
-	GLuint vao;
 	GLuint vshader;
 	GLuint fshader;
 	GLuint program;
 	GLint unif_mvp;
-	GLuint static_vbo;
-	GLuint static_ibo;
-	mat4x4 static_model;
+	mat4x4 vp;
 
 	mesh_node_t * mesh_root;
-
-	unsigned long long int vbo_size;
-	unsigned long long int ibo_size;
-	unsigned long long int static_vbo_size;
-	unsigned long long int static_ibo_size;
 
 	unsigned int settings;
 } static state = {
 	NULL, NULL,
-	0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0,
 	{ 0 },
 	NULL,
-	0, 0, 0, 0,
 	KGFW_GRAPHICS_SETTINGS_DEFAULT,
 };
 
 struct {
 	mat4x4 model;
-	mat4x4 vp;
+	vec3 pos;
+	vec3 rot;
+	vec3 scale;
 } recurse_state = {
 	{
 		{ 1, 0, 0, 0 },
@@ -87,12 +79,6 @@ struct {
 		{ 0, 0, 1, 0 },
 		{ 0, 0, 0, 1 },
 	},
-	{
-		{ 1, 0, 0, 0 },
-		{ 0, 1, 0, 0 },
-		{ 0, 0, 1, 0 },
-		{ 0, 0, 0, 1 },
-	}
 };
 
 static void update_settings(unsigned int change);
@@ -132,17 +118,11 @@ unsigned int kgfw_graphics_settings_get(void) {
 	return state.settings;
 }
 
-int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera, kgfw_graphics_mesh_t * mesh) {
+int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	register_commands();
 
 	state.window = window;
 	state.camera = camera;
-	state.vbo_size = KGFW_GRAPHICS_DEFAULT_VERTICES_COUNT;
-	state.ibo_size = KGFW_GRAPHICS_DEFAULT_INDICES_COUNT;
-	/*if (mesh != NULL) {
-		state.static_vbo_size = mesh->vertices_count;
-		state.static_ibo_size = mesh->indices_count;
-	}*/
 
 	if (window != NULL) {
 		if (window->internal != NULL) {
@@ -326,44 +306,6 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera, kgfw_grap
 	GL_CALL(glLinkProgram(state.program));
 	GL_CALL(glUseProgram(state.program));
 
-	GL_CALL(glGenVertexArrays(1, &state.vao));
-	GL_CALL(glGenBuffers(1, &state.vbo));
-	GL_CALL(glGenBuffers(1, &state.ibo));
-
-	if (mesh != NULL) {
-		//glGenBuffers(1, &state.static_vbo);
-		//glGenBuffers(1, &state.static_ibo);
-	}
-
-	GL_CALL(glBindVertexArray(state.vao));
-	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, state.vbo));
-	GL_CALL(glBufferData(GL_ARRAY_BUFFER, sizeof(kgfw_graphics_vertex_t) * state.vbo_size, NULL, GL_DYNAMIC_DRAW));
-	GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.ibo));
-	GL_CALL(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * state.ibo_size, NULL, GL_DYNAMIC_DRAW));
-
-	if (mesh != NULL) {
-		mesh_node_t * node = (mesh_node_t *) kgfw_graphics_mesh_new(mesh, NULL);
-		memcpy(node->transform.pos, mesh->pos, sizeof(vec3));
-		memcpy(node->transform.rot, mesh->rot, sizeof(vec3));
-		memcpy(node->transform.scale, mesh->scale, sizeof(vec3));
-		node->transform.absolute = 1;
-
-		state.mesh_root = node;
-		/*glBindBuffer(GL_ARRAY_BUFFER, state.static_vbo);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(kgfw_graphics_vertex_t) * state.static_vbo_size, mesh->vertices, GL_STATIC_DRAW);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.static_ibo);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * state.static_ibo_size, mesh->indices, GL_STATIC_DRAW);*/
-	}
-
-	GL_CALL(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, x)));
-	GL_CALL(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, r)));
-	GL_CALL(glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, nx)));
-	GL_CALL(glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, u)));
-	GL_CALL(glEnableVertexAttribArray(0));
-	GL_CALL(glEnableVertexAttribArray(1));
-	GL_CALL(glEnableVertexAttribArray(2));
-	GL_CALL(glEnableVertexAttribArray(3));
-
 	state.unif_mvp = GL_CALL(glGetUniformLocation(state.program, "unif_mvp"));
 
 	GL_CALL(glEnable(GL_DEPTH_TEST));
@@ -378,13 +320,12 @@ void kgfw_graphics_draw(void) {
 	GL_CALL(glClearColor(0.15f, 0.1f, 0.175f, 1.0f));
 
 	mat4x4 mvp;
-	mat4x4 vp;
 	mat4x4 m;
 	mat4x4 v;
 	mat4x4 p;
 
 	mat4x4_identity(mvp);
-	mat4x4_identity(recurse_state.vp);
+	mat4x4_identity(state.vp);
 	mat4x4_identity(m);
 	mat4x4_identity(v);
 	mat4x4_identity(p);
@@ -392,45 +333,49 @@ void kgfw_graphics_draw(void) {
 	kgfw_camera_view(state.camera, v);
 	kgfw_camera_perspective(state.camera, p);
 
-	mat4x4_mul(recurse_state.vp, p, v);
-	//mat4x4_mul(mvp, vp, m);
-
-	/*if (state.ibo_size > 0) {
-		glBindBuffer(GL_ARRAY_BUFFER, state.vbo);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.ibo);
-		glDrawElements(GL_TRIANGLES, state.ibo_size, GL_UNSIGNED_INT, NULL);
-	}
-
-	if (state.static_ibo_size > 0) {
-		glUniformMatrix4fv(state.unif_mvp, 1, GL_FALSE, &mvp[0][0]);
-		
-		glBindBuffer(GL_ARRAY_BUFFER, state.static_vbo);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.static_ibo);
-		glDrawElements(GL_TRIANGLES, state.static_ibo_size, GL_UNSIGNED_INT, NULL);
-	}*/
-
-	//mat4x4_identity(state.static_model);
+	mat4x4_mul(state.vp, p, v);
 	
 	if (state.mesh_root != NULL) {
-		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "node = {\n  transform = {\n    pos = {\n      %f, %f, %f\n    }\n    rot = {\n      %f, %f, %f\n    }\n    scale = {\n      %f, %f, %f\n    }\n    absolute = %u\n  }\n\n  parent = %p\n  child = %p\n  sibling = %p\n\n  gl = {\n    vbo = %u\n    ibo = %u\n    program = %u\n    vbo_size = %llu\n    ibo_size = %llu\n  }\n}", state.mesh_root->transform.pos[0], state.mesh_root->transform.pos[1], state.mesh_root->transform.pos[2], state.mesh_root->transform.rot[0], state.mesh_root->transform.rot[1], state.mesh_root->transform.rot[2], state.mesh_root->transform.scale[0], state.mesh_root->transform.scale[1], state.mesh_root->transform.scale[2], state.mesh_root->transform.absolute, state.mesh_root->parent, state.mesh_root->child, state.mesh_root->sibling, state.mesh_root->gl.vbo, state.mesh_root->gl.ibo, state.mesh_root->gl.program, state.mesh_root->gl.vbo_size, state.mesh_root->gl.ibo_size);
+		mat4x4_identity(recurse_state.model);
+
+		recurse_state.pos[0] = 0;
+		recurse_state.pos[1] = 0;
+		recurse_state.pos[2] = 0;
+		recurse_state.rot[0] = 0;
+		recurse_state.rot[1] = 0;
+		recurse_state.rot[2] = 0;
+		recurse_state.scale[0] = 1;
+		recurse_state.scale[1] = 1;
+		recurse_state.scale[2] = 1;
+
 		meshes_draw_recursive_fchild(state.mesh_root);
 	}
 }
 
 kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, kgfw_graphics_mesh_node_t * parent) {
-	//node->parent = (mesh_node_t *) parent;
-	/*memcpy(node->transform.pos, mesh->pos, sizeof(vec3));
-	memcpy(node->transform.rot, mesh->rot, sizeof(vec3));
-	memcpy(node->transform.scale, mesh->scale, sizeof(vec3));*/
-	//node->transform.absolute = 0;
 	mesh_node_t * node = meshes_new();
+	node->parent = (mesh_node_t *) parent;
+	memcpy(node->transform.pos, mesh->pos, sizeof(vec3));
+	memcpy(node->transform.rot, mesh->rot, sizeof(vec3));
+	memcpy(node->transform.scale, mesh->scale, sizeof(vec3));
 	node->gl.vbo_size = mesh->vertices_count;
 	node->gl.ibo_size = mesh->indices_count;
+	GL_CALL(glBindVertexArray(node->gl.vao));
 	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, node->gl.vbo));
 	GL_CALL(glBufferData(GL_ARRAY_BUFFER, sizeof(kgfw_graphics_vertex_t) * mesh->vertices_count, mesh->vertices, GL_STATIC_DRAW));
 	GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, node->gl.ibo));
 	GL_CALL(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * mesh->indices_count, mesh->indices, GL_STATIC_DRAW));
-	/*if (parent == NULL) {
+
+	GL_CALL(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, x)));
+	GL_CALL(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, r)));
+	GL_CALL(glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, nx)));
+	GL_CALL(glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, u)));
+	GL_CALL(glEnableVertexAttribArray(0));
+	GL_CALL(glEnableVertexAttribArray(1));
+	GL_CALL(glEnableVertexAttribArray(2));
+	GL_CALL(glEnableVertexAttribArray(3));
+
+	if (parent == NULL) {
 		if (state.mesh_root == NULL) {
 			state.mesh_root = node;
 		} else {
@@ -447,7 +392,7 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 		mesh_node_t * n;
 		for (n = (mesh_node_t *) parent->child; n->sibling != NULL; n = n->sibling);
 		n->sibling = node;
-	}*/
+	}
 	
 	return (kgfw_graphics_mesh_node_t *) node;
 }
@@ -488,6 +433,9 @@ static mesh_node_t * meshes_alloc(void) {
 }
 
 static void meshes_free(mesh_node_t * node) {
+	if (node->gl.vao != 0) {
+		glDeleteProgram(node->gl.vao);
+	}
 	if (node->gl.vbo != 0) {
 		glDeleteBuffers(1, &node->gl.vbo);
 	}
@@ -502,6 +450,7 @@ static void meshes_free(mesh_node_t * node) {
 }
 
 static void meshes_gen(mesh_node_t * node) {
+	GL_CALL(glGenVertexArrays(1, &node->gl.vao));
 	GL_CALL(glGenBuffers(1, &node->gl.vbo));
 	GL_CALL(glGenBuffers(1, &node->gl.ibo));
 }
@@ -518,14 +467,33 @@ static mesh_node_t * meshes_new(void) {
 
 static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
 	if (mesh->transform.absolute) {
-		//mat4x4_translate(out_m, mesh->transform.pos[0], mesh->transform.pos[1], -mesh->transform.pos[2]);
+		recurse_state.pos[0] = 0;
+		recurse_state.pos[1] = 0;
+		recurse_state.pos[2] = 0;
+		recurse_state.rot[0] = 0;
+		recurse_state.rot[1] = 0;
+		recurse_state.rot[2] = 0;
+		recurse_state.scale[0] = 0;
+		recurse_state.scale[1] = 0;
+		recurse_state.scale[2] = 0;
+		mat4x4_identity(out_m);
+		mat4x4_translate(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], -recurse_state.pos[0] - mesh->transform.pos[2]);
 	} else {
-		//mat4x4_translate_in_place(out_m, mesh->transform.pos[0], mesh->transform.pos[1], -mesh->transform.pos[2]);
+		recurse_state.pos[0] += mesh->transform.pos[0];
+		recurse_state.pos[1] += mesh->transform.pos[1];
+		recurse_state.pos[2] += mesh->transform.pos[2];
+		recurse_state.rot[0] += mesh->transform.rot[0];
+		recurse_state.rot[1] += mesh->transform.rot[1];
+		recurse_state.rot[2] += mesh->transform.rot[2];
+		recurse_state.scale[0] *= mesh->transform.scale[0];
+		recurse_state.scale[1] *= mesh->transform.scale[1];
+		recurse_state.scale[2] *= mesh->transform.scale[2];
+		mat4x4_translate_in_place(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], -recurse_state.pos[2] - mesh->transform.pos[2]);
 	}
-	mat4x4_rotate_X(out_m, out_m, mesh->transform.rot[0] * 3.141592f / 180.0f);
-	mat4x4_rotate_Y(out_m, out_m, mesh->transform.rot[1] * 3.141592f / 180.0f);
-	mat4x4_rotate_Z(out_m, out_m, mesh->transform.rot[2] * 3.141592f / 180.0f);
-	//mat4x4_scale_aniso(out_m, out_m, mesh->transform.scale[0], mesh->transform.scale[1], mesh->transform.scale[2]);
+	mat4x4_rotate_X(out_m, out_m, (recurse_state.rot[0] + mesh->transform.rot[0]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Y(out_m, out_m, (recurse_state.rot[1] + mesh->transform.rot[1]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Z(out_m, out_m, (recurse_state.rot[2] + mesh->transform.rot[2]) * 3.141592f / 180.0f);
+	mat4x4_scale_aniso(out_m, out_m, recurse_state.scale[0] * mesh->transform.scale[0], recurse_state.scale[1] * mesh->transform.scale[1], recurse_state.scale[2] * mesh->transform.scale[2]);
 }
 
 static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
@@ -542,10 +510,12 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 
 	mat4x4 mvp;
 	mat4x4_identity(mvp);
+	mat4x4_identity(out_m);
 	mesh_transform(mesh, out_m);
-	mat4x4_mul(mvp, recurse_state.vp, out_m);
+	mat4x4_mul(mvp, state.vp, out_m);
 
 	GL_CALL(glUniformMatrix4fv(uniform, 1, GL_FALSE, &mvp[0][0]));
+	GL_CALL(glBindVertexArray(mesh->gl.vao));
 	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, mesh->gl.vbo));
 	GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->gl.ibo));
 	GL_CALL(glDrawElements(GL_TRIANGLES, mesh->gl.ibo_size, GL_UNSIGNED_INT, 0));
@@ -569,8 +539,12 @@ static void meshes_draw_recursive_fchild(mesh_node_t * mesh) {
 		return;
 	}
 
-	mat4x4 matrix;
-	memcpy(matrix, recurse_state.model, sizeof(mat4x4));
+	vec3 pos;
+	vec3 rot;
+	vec3 scale;
+	memcpy(pos, recurse_state.pos, sizeof(pos));
+	memcpy(rot, recurse_state.rot, sizeof(rot));
+	memcpy(scale, recurse_state.scale, sizeof(scale));
 	
 	meshes_draw_recursive(mesh);
 	for (mesh_node_t * m = mesh;;) {
@@ -579,7 +553,9 @@ static void meshes_draw_recursive_fchild(mesh_node_t * mesh) {
 			break;
 		}
 
-		memcpy(recurse_state.model, matrix, sizeof(mat4x4));
+		memcpy(recurse_state.pos, pos, sizeof(pos));
+		memcpy(recurse_state.rot, rot, sizeof(rot));
+		memcpy(recurse_state.scale, scale, sizeof(scale));
 		meshes_draw_recursive(m);
 	}
 }

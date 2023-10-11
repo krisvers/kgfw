@@ -10,4 +10,3 @@ KGFW_PUBLIC void kgfw_time_start(void);
 KGFW_PUBLIC void kgfw_time_end(void);
 
 #endif
-
