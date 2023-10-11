@@ -374,6 +374,7 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 	GL_CALL(glEnableVertexAttribArray(1));
 	GL_CALL(glEnableVertexAttribArray(2));
 	GL_CALL(glEnableVertexAttribArray(3));
+	GL_CALL(glBindVertexArray(0));
 
 	if (parent == NULL) {
 		if (state.mesh_root == NULL) {
@@ -504,6 +505,7 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 		return;
 	}
 
+	GL_CALL(glBindVertexArray(mesh->gl.vao));
 	GLuint program = (mesh->gl.program == 0) ? state.program : mesh->gl.program;
 	GL_CALL(glUseProgram(program));
 	GLint uniform = GL_CALL(glGetUniformLocation(state.program, "unif_mvp"));
@@ -515,7 +517,6 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	mat4x4_mul(mvp, state.vp, out_m);
 
 	GL_CALL(glUniformMatrix4fv(uniform, 1, GL_FALSE, &mvp[0][0]));
-	GL_CALL(glBindVertexArray(mesh->gl.vao));
 	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, mesh->gl.vbo));
 	GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->gl.ibo));
 	GL_CALL(glDrawElements(GL_TRIANGLES, mesh->gl.ibo_size, GL_UNSIGNED_INT, 0));
@@ -569,15 +570,15 @@ static void update_settings(unsigned int change) {
 }
 
 static int gfx_command(int argc, char ** argv) {
-	const char * subcommands = "set    enable    disable";
+	const char * subcommands = "set    enable    disable    reload";
 	if (argc < 2) {
 		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "subcommands: %s", subcommands);
 		return 0;
 	}
 	
-	const char * options = "vsync";
-	const char * arguments = "[option]    see 'gfx options'";
 	if (strcmp("enable", argv[1]) == 0) {
+		const char * options = "vsync";
+		const char * arguments = "[option]    see 'gfx options'";
 		if (argc < 3) {
 			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", arguments);
 			return 0;
@@ -585,8 +586,13 @@ static int gfx_command(int argc, char ** argv) {
 
 		if (strcmp("vsync", argv[2]) == 0) {
 			kgfw_graphics_settings_set(KGFW_GRAPHICS_SETTINGS_ACTION_ENABLE, KGFW_GRAPHICS_SETTINGS_VSYNC);
+			return 0;
 		}
+
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no option %s", argv[2]);
 	} else if (strcmp("disable", argv[1]) == 0) {
+		const char * options = "vsync";
+		const char * arguments = "[option]    see 'gfx options'";
 		if (argc < 3) {
 			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", arguments);
 			return 0;
@@ -594,8 +600,13 @@ static int gfx_command(int argc, char ** argv) {
 
 		if (strcmp("vsync", argv[2]) == 0) {
 			kgfw_graphics_settings_set(KGFW_GRAPHICS_SETTINGS_ACTION_DISABLE, KGFW_GRAPHICS_SETTINGS_VSYNC);
+			return 0;
 		}
+
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no option %s", argv[2]);
 	} else if (strcmp("options", argv[1]) == 0) {
+		const char * options = "vsync    shaders";
+		const char * arguments = "[option]    see 'gfx options'";
 		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "options: %s", options);
 	} else {
 		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "subcommands: %s", subcommands);

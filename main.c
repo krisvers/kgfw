@@ -13,7 +13,7 @@ struct {
 	unsigned char exit;
 } static state = {
 	{ 0 },
-	{ { 0, 0, 0 }, { 0, 0, 0 }, 90, 0.01f, 10000.0f, 1.3333f, 1 },
+	{ { 0, 0, 0 }, { 0, 0, 0 }, 90, 0.01f, 1000.0f, 1.3333f, 0 },
 	1, 0
 };
 
@@ -61,8 +61,6 @@ int main(int argc, char ** argv) {
 		return 2;
 	}
 
-	kgfw_graphics_mesh_node_t * node = NULL;
-
 	{
 		kgfw_graphics_vertex_t vertices[] = {
 			{  1.0f,  1.0f, -1.0f,	1.0f, 1.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	0, 0 },
@@ -97,11 +95,11 @@ int main(int argc, char ** argv) {
 		};
 
 		kgfw_graphics_mesh_t mesh = {
-			vertices, sizeof(vertices) / sizeof(vertices[0]), indices, sizeof(indices) / sizeof(indices[0])
+			vertices, sizeof(vertices) / sizeof(kgfw_graphics_vertex_t), indices, sizeof(indices) / sizeof(unsigned int)
 		};
 		mesh.pos[0] = 0; mesh.pos[1] = 0; mesh.pos[2] = 5;
 		mesh.rot[0] = 0; mesh.rot[1] = 0; mesh.rot[2] = 0;
-		mesh.scale[0] = 50; mesh.scale[1] = 50; mesh.scale[2] = 50;
+		mesh.scale[0] = 1; mesh.scale[1] = 1; mesh.scale[2] = 1;
 
 		if (kgfw_graphics_init(&state.window, &state.camera) != 0) {
 			kgfw_audio_deinit();
@@ -109,10 +107,6 @@ int main(int argc, char ** argv) {
 			kgfw_deinit();
 			return 3;
 		}
-		node = kgfw_graphics_mesh_new(&mesh, NULL);
-		node->transform.absolute = 1;
-
-		mesh.scale[0] = 1; mesh.scale[1] = 1; mesh.scale[2] = 1;
 
 		mesh.scale[0] *= 3;
 		mesh.pos[0] += 10;
@@ -174,7 +168,6 @@ int main(int argc, char ** argv) {
 			state.exit = 1;
 			break;
 		}
-		kgfw_time_end();
 
 		kgfw_ecs_update();
 
@@ -195,6 +188,7 @@ int main(int argc, char ** argv) {
 			state.exit = 1;
 			break;
 		}
+		kgfw_time_end();
 		
 		mov->update(mov, &mov_state);
 		if (mov_state.camera->rot[0] > 360 || mov_state.camera->rot[0] < 0) {
@@ -206,10 +200,6 @@ int main(int argc, char ** argv) {
 		if (mov_state.camera->rot[2] > 360 || mov_state.camera->rot[2] < 0) {
 			mov_state.camera->rot[2] = fmod(mov_state.camera->rot[2], 360);
 		}
-
-		node->transform.pos[0] = state.camera.pos[0];
-		node->transform.pos[1] = state.camera.pos[1];
-		node->transform.pos[2] = state.camera.pos[2];
 
 		kgfw_input_update();
 		kgfw_audio_update();
