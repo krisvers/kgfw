@@ -473,9 +473,9 @@ static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
 		recurse_state.rot[0] = 0;
 		recurse_state.rot[1] = 0;
 		recurse_state.rot[2] = 0;
-		recurse_state.scale[0] = 0;
-		recurse_state.scale[1] = 0;
-		recurse_state.scale[2] = 0;
+		recurse_state.scale[0] = 1;
+		recurse_state.scale[1] = 1;
+		recurse_state.scale[2] = 1;
 		mat4x4_identity(out_m);
 		mat4x4_translate(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], -recurse_state.pos[0] - mesh->transform.pos[2]);
 	} else {
