@@ -191,13 +191,13 @@ int main(int argc, char ** argv) {
 		kgfw_time_end();
 		
 		mov->update(mov, &mov_state);
-		if (mov_state.camera->rot[0] > 360 || mov_state.camera->rot[0] < 0) {
+		if (mov_state.camera->rot[0] >= 360 || mov_state.camera->rot[0] < 0) {
 			mov_state.camera->rot[0] = fmod(mov_state.camera->rot[0], 360);
 		}
-		if (mov_state.camera->rot[1] > 360 || mov_state.camera->rot[1] < 0) {
+		if (mov_state.camera->rot[1] >= 360 || mov_state.camera->rot[1] < 0) {
 			mov_state.camera->rot[1] = fmod(mov_state.camera->rot[1], 360);
 		}
-		if (mov_state.camera->rot[2] > 360 || mov_state.camera->rot[2] < 0) {
+		if (mov_state.camera->rot[2] >= 360 || mov_state.camera->rot[2] < 0) {
 			mov_state.camera->rot[2] = fmod(mov_state.camera->rot[2], 360);
 		}
 

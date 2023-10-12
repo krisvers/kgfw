@@ -53,7 +53,6 @@ struct {
 	GLuint vshader;
 	GLuint fshader;
 	GLuint program;
-	GLint unif_mvp;
 	mat4x4 vp;
 
 	mesh_node_t * mesh_root;
@@ -61,7 +60,7 @@ struct {
 	unsigned int settings;
 } static state = {
 	NULL, NULL,
-	0, 0, 0, 0,
+	0, 0, 0,
 	{ 0 },
 	NULL,
 	KGFW_GRAPHICS_SETTINGS_DEFAULT,
@@ -145,7 +144,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	{
 		const GLchar * fallback_vshader =
 			"#version 330 core\n"
-			"layout(location = 0) in vec3 in_pos; layout(location = 1) in vec3 in_color; layout(location = 2) in vec3 in_normal; layout(location = 3) in vec2 in_uv; uniform mat4 unif_mvp; out vec3 v_pos; out vec3 v_color; out vec3 v_normal; out vec2 v_uv; void main() { gl_Position = unif_mvp * vec4(in_pos, 1.0); v_pos = in_pos; v_color = in_color; v_normal = in_normal; v_uv = in_uv; }";
+			"layout(location = 0) in vec3 in_pos; layout(location = 1) in vec3 in_color; layout(location = 2) in vec3 in_normal; layout(location = 3) in vec2 in_uv; uniform mat4 unif_m; uniform mat4 unif_vp; out vec3 v_pos; out vec3 v_color; out vec3 v_normal; out vec2 v_uv; void main() { gl_Position = unif_vp * unif_m * vec4(in_pos, 1.0); v_pos = vec3(unif_m * vec4(in_pos, 1.0)); v_color = in_color; v_normal = in_normal; v_uv = in_uv; }";
 
 		const GLchar * fallback_fshader =
 			"#version 330 core\n"
@@ -233,7 +232,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		if (success == GL_FALSE) {
 			char msg[512];
 			GL_CALL(glGetShaderInfoLog(state.vshader, 512, NULL, msg));
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided vertex shader compilation error: \"%s\"", msg);
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided vertex shader compilation error: %s", msg);
 
 		vfallback_compilation:
 			vshader = (GLchar *) fallback_vshader;
@@ -242,7 +241,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			GL_CALL(glGetShaderiv(state.vshader, GL_COMPILE_STATUS, &success));
 			if (success == GL_FALSE) {
 				GL_CALL(glGetShaderInfoLog(state.vshader, 512, NULL, msg));
-				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback vertex shader compilation error: \"%s\"", msg);
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback vertex shader compilation error: %s", msg);
 				return 2;
 			}
 		}
@@ -255,7 +254,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		if (success == GL_FALSE) {
 			char msg[512];
 			GL_CALL(glGetShaderInfoLog(state.fshader, 512, NULL, msg));
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided fragment shader compilation error: \"%s\"", msg);
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided fragment shader compilation error: %s", msg);
 
 		ffallback_compilation:
 			fshader = (GLchar *) fallback_fshader;
@@ -264,7 +263,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			GL_CALL(glGetShaderiv(state.fshader, GL_COMPILE_STATUS, &success));
 			if (success == GL_FALSE) {
 				GL_CALL(glGetShaderInfoLog(state.fshader, 512, NULL, msg));
-				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback fragment shader compilation error: \"%s\"", msg);
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback fragment shader compilation error: %s", msg);
 				return 2;
 			}
 		}
@@ -275,8 +274,6 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	GL_CALL(glAttachShader(state.program, state.fshader));
 	GL_CALL(glLinkProgram(state.program));
 	GL_CALL(glUseProgram(state.program));
-
-	state.unif_mvp = GL_CALL(glGetUniformLocation(state.program, "unif_mvp"));
 
 	GL_CALL(glEnable(GL_DEPTH_TEST));
 
@@ -474,15 +471,14 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 
 	GLuint program = (mesh->gl.program == 0) ? state.program : mesh->gl.program;
 	GL_CALL(glUseProgram(program));
-	GLint uniform = GL_CALL(glGetUniformLocation(state.program, "unif_mvp"));
+	GLint uniform_model = GL_CALL(glGetUniformLocation(state.program, "unif_m"));
+	GLint uniform_vp = GL_CALL(glGetUniformLocation(state.program, "unif_vp"));
 
-	mat4x4 mvp;
-	mat4x4_identity(mvp);
 	mat4x4_identity(out_m);
 	mesh_transform(mesh, out_m);
-	mat4x4_mul(mvp, state.vp, out_m);
 
-	GL_CALL(glUniformMatrix4fv(uniform, 1, GL_FALSE, &mvp[0][0]));
+	GL_CALL(glUniformMatrix4fv(uniform_model, 1, GL_FALSE, &out_m[0][0]));
+	GL_CALL(glUniformMatrix4fv(uniform_vp, 1, GL_FALSE, &state.vp[0][0]));
 	GL_CALL(glBindVertexArray(mesh->gl.vao));
 	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, mesh->gl.vbo));
 	GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->gl.ibo));
@@ -543,7 +539,21 @@ static int gfx_command(int argc, char ** argv) {
 		return 0;
 	}
 	
-	if (strcmp("enable", argv[1]) == 0) {
+	if (strcmp("reload", argv[1]) == 0) {
+		const char * options = "vsync";
+		const char * arguments = "[option]    see 'gfx options'";
+		if (argc < 3) {
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", arguments);
+			return 0;
+		}
+
+		if (strcmp("shaders", argv[2]) == 0) {
+			
+			return 0;
+		}
+
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no option %s", argv[2]);
+	} else if (strcmp("enable", argv[1]) == 0) {
 		const char * options = "vsync";
 		const char * arguments = "[option]    see 'gfx options'";
 		if (argc < 3) {
