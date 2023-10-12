@@ -1,9 +1,9 @@
 #version 330 core
 
-in vec3 in_pos;
-in vec3 in_color;
-in vec3 in_normal;
-in vec2 in_uv;
+layout(location = 0) in vec3 in_pos;
+layout(location = 1) in vec3 in_color;
+layout(location = 2) in vec3 in_normal;
+layout(location = 3) in vec2 in_uv;
 uniform mat4 unif_mvp;
 out vec3 v_pos;
 out vec3 v_color;

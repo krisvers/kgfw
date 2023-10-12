@@ -145,11 +145,11 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	{
 		const GLchar * fallback_vshader =
 			"#version 330 core\n"
-			"in vec3 in_pos; in vec3 in_color; uniform mat4 unif_mvp; out vec3 v_pos; out vec3 v_color; void main() { gl_Position = unif_mvp * vec4(in_pos, 1.0); v_pos = gl_Position.xyz; v_color = in_color; }";
+			"layout(location = 0) in vec3 in_pos; layout(location = 1) in vec3 in_color; layout(location = 2) in vec3 in_normal; layout(location = 3) in vec2 in_uv; uniform mat4 unif_mvp; out vec3 v_pos; out vec3 v_color; out vec3 v_normal; out vec2 v_uv; void main() { gl_Position = unif_mvp * vec4(in_pos, 1.0); v_pos = in_pos; v_color = in_color; v_normal = in_normal; v_uv = in_uv; }";
 
 		const GLchar * fallback_fshader =
 			"#version 330 core\n"
-			"in vec3 v_pos; in vec3 v_color; out vec4 out_color; void main() { out_color = vec4(v_color, 1); }";
+			"in vec3 v_pos; in vec3 v_color; in vec3 v_normal; in vec2 v_uv; out vec4 out_color; void main() { out_color = vec4(v_color, 1); }";
 
 		GLchar * vshader = (GLchar *) fallback_vshader;
 		GLchar * fshader = (GLchar *) fallback_fshader;
@@ -231,16 +231,9 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		GLint success = GL_TRUE;
 		GL_CALL(glGetShaderiv(state.vshader, GL_COMPILE_STATUS, &success));
 		if (success == GL_FALSE) {
-			GLsizei len = 0;
-			GL_CALL(glGetShaderInfoLog(state.vshader, 0, &len, NULL));
-			GLchar * msg = malloc(len + 1);
-			if (msg == NULL) {
-				goto vfallback_compilation;
-			}
-			msg[len] = '\0';
-			GL_CALL(glGetShaderInfoLog(state.vshader, len, NULL, msg));
+			char msg[512];
+			GL_CALL(glGetShaderInfoLog(state.vshader, 512, NULL, msg));
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided vertex shader compilation error: \"%s\"", msg);
-			free(msg);
 
 		vfallback_compilation:
 			vshader = (GLchar *) fallback_vshader;
@@ -248,16 +241,8 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			GL_CALL(glCompileShader(state.vshader));
 			GL_CALL(glGetShaderiv(state.vshader, GL_COMPILE_STATUS, &success));
 			if (success == GL_FALSE) {
-				len = 0;
-				GL_CALL(glGetShaderInfoLog(state.vshader, 0, &len, NULL));
-				msg = malloc(len + 1);
-				if (msg == NULL) {
-					return 2;
-				}
-				msg[len] = '\0';
-				GL_CALL(glGetShaderInfoLog(state.vshader, len, NULL, msg));
+				GL_CALL(glGetShaderInfoLog(state.vshader, 512, NULL, msg));
 				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback vertex shader compilation error: \"%s\"", msg);
-				free(msg);
 				return 2;
 			}
 		}
@@ -268,16 +253,9 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		
 		GL_CALL(glGetShaderiv(state.fshader, GL_COMPILE_STATUS, &success));
 		if (success == GL_FALSE) {
-			GLsizei len = 0;
-			GL_CALL(glGetShaderInfoLog(state.fshader, 0, &len, NULL));
-			GLchar * msg = malloc(len + 1);
-			if (msg == NULL) {
-				goto ffallback_compilation;
-			}
-			msg[len] = '\0';
-			GL_CALL(glGetShaderInfoLog(state.fshader, len, NULL, msg));
+			char msg[512];
+			GL_CALL(glGetShaderInfoLog(state.fshader, 512, NULL, msg));
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided fragment shader compilation error: \"%s\"", msg);
-			free(msg);
 
 		ffallback_compilation:
 			fshader = (GLchar *) fallback_fshader;
@@ -285,16 +263,8 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			GL_CALL(glCompileShader(state.fshader));
 			GL_CALL(glGetShaderiv(state.fshader, GL_COMPILE_STATUS, &success));
 			if (success == GL_FALSE) {
-				len = 0;
-				GL_CALL(glGetShaderInfoLog(state.fshader, 0, &len, NULL));
-				msg = malloc(len + 1);
-				if (msg == NULL) {
-					return 2;
-				}
-				msg[len] = '\0';
-				GL_CALL(glGetShaderInfoLog(state.fshader, len, NULL, msg));
+				GL_CALL(glGetShaderInfoLog(state.fshader, 512, NULL, msg));
 				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback fragment shader compilation error: \"%s\"", msg);
-				free(msg);
 				return 2;
 			}
 		}
@@ -309,8 +279,6 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	state.unif_mvp = GL_CALL(glGetUniformLocation(state.program, "unif_mvp"));
 
 	GL_CALL(glEnable(GL_DEPTH_TEST));
-	/*glCullFace(GL_BACK);
-	glEnable(GL_CULL_FACE);*/
 
 	return 0;
 }
@@ -374,7 +342,6 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 	GL_CALL(glEnableVertexAttribArray(1));
 	GL_CALL(glEnableVertexAttribArray(2));
 	GL_CALL(glEnableVertexAttribArray(3));
-	GL_CALL(glBindVertexArray(0));
 
 	if (parent == NULL) {
 		if (state.mesh_root == NULL) {
@@ -505,7 +472,6 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 		return;
 	}
 
-	GL_CALL(glBindVertexArray(mesh->gl.vao));
 	GLuint program = (mesh->gl.program == 0) ? state.program : mesh->gl.program;
 	GL_CALL(glUseProgram(program));
 	GLint uniform = GL_CALL(glGetUniformLocation(state.program, "unif_mvp"));
@@ -517,6 +483,7 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	mat4x4_mul(mvp, state.vp, out_m);
 
 	GL_CALL(glUniformMatrix4fv(uniform, 1, GL_FALSE, &mvp[0][0]));
+	GL_CALL(glBindVertexArray(mesh->gl.vao));
 	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, mesh->gl.vbo));
 	GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->gl.ibo));
 	GL_CALL(glDrawElements(GL_TRIANGLES, mesh->gl.ibo_size, GL_UNSIGNED_INT, 0));
