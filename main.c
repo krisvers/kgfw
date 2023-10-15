@@ -63,15 +63,15 @@ int main(int argc, char ** argv) {
 
 	{
 		kgfw_graphics_vertex_t vertices[] = {
-			{  1.0f,  1.0f, -1.0f,	1.0f, 1.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	1, 0 },
+			{  1.0f,  1.0f, -1.0f,	1.0f, 1.0f, 0.0f,	 1.0f,  1.0f, -1.0f,	1, 0 },
 			{ -1.0f, -1.0f, -1.0f,	0.0f, 0.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	1, 0 },
-			{ -1.0f,  1.0f, -1.0f,	0.0f, 1.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	1, 0 },
-			{  1.0f, -1.0f, -1.0f,	1.0f, 0.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	1, 0 },
+			{ -1.0f,  1.0f, -1.0f,	0.0f, 1.0f, 0.0f,	-1.0f,  1.0f, -1.0f,	1, 0 },
+			{  1.0f, -1.0f, -1.0f,	1.0f, 0.0f, 0.0f,	 1.0f, -1.0f, -1.0f,	1, 0 },
 
-			{  1.0f,  1.0f,  1.0f,	1.0f, 1.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	1, 0 },
-			{ -1.0f, -1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	1, 0 },
-			{ -1.0f,  1.0f,  1.0f,	0.0f, 1.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	1, 0 },
-			{  1.0f, -1.0f,  1.0f,	1.0f, 0.0f, 1.0f,	-1.0f, -1.0f, -1.0f,	1, 0 },
+			{  1.0f,  1.0f,  1.0f,	1.0f, 1.0f, 1.0f,	 1.0f,  1.0f,  1.0f,	1, 0 },
+			{ -1.0f, -1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	-1.0f, -1.0f,  1.0f,	1, 0 },
+			{ -1.0f,  1.0f,  1.0f,	0.0f, 1.0f, 1.0f,	-1.0f,  1.0f,  1.0f,	1, 0 },
+			{  1.0f, -1.0f,  1.0f,	1.0f, 0.0f, 1.0f,	 1.0f, -1.0f,  1.0f,	1, 0 },
 		};
 
 		unsigned int indices[] = {
@@ -110,7 +110,12 @@ int main(int argc, char ** argv) {
 
 		mesh.scale[0] *= 3;
 		mesh.pos[0] += 10;
-		kgfw_graphics_mesh_new(&mesh, NULL);
+		kgfw_graphics_texture_t tex {
+			buf,
+			1, 1,
+			KGFW_GRAPHICS_TEXTURE_FORMAT_RGBA,
+		};
+		kgfw_graphics_mesh_texture(kgfw_graphics_mesh_new(&mesh, NULL), &tex);
 
 		mesh.scale[1] *= 3;
 		mesh.pos[1] += 10;
@@ -118,6 +123,12 @@ int main(int argc, char ** argv) {
 
 		mesh.scale[2] *= 3;
 		mesh.pos[2] += 10;
+		kgfw_graphics_mesh_new(&mesh, NULL);
+
+		mesh.pos[1] = -10;
+		mesh.scale[0] = 20;
+		mesh.scale[1] = 1;
+		mesh.scale[2] = 20;
 		kgfw_graphics_mesh_new(&mesh, NULL);
 	}
 

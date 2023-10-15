@@ -12,6 +12,31 @@ typedef struct kgfw_graphics_vertex {
 	float u, v;
 } kgfw_graphics_vertex_t;
 
+typedef enum kgfw_graphics_texture_format {
+	KGFW_GRAPHICS_TEXTURE_FORMAT_BGRA,
+	KGFW_GRAPHICS_TEXTURE_FORMAT_RGBA,
+} kgfw_graphics_texture_format_enum;
+
+typedef enum kgfw_graphics_texture_wrap {
+	KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
+	KGFW_GRAPHICS_TEXTURE_WRAP_REPEAT,
+} kgfw_graphics_texture_wrap_enum;
+
+typedef enum kgfw_graphics_texture_filtering {
+	KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
+	KGFW_GRAPHICS_TEXTURE_FILTERING_LINEAR,
+} kgfw_graphics_texture_filtering_enum;
+
+typedef struct kgfw_graphics_texture {
+	void * bitmap;
+	unsigned long long int width;
+	unsigned long long int height;
+	kgfw_graphics_texture_format_enum fmt;
+	kgfw_graphics_texture_wrap_enum u_wrap;
+	kgfw_graphics_texture_wrap_enum v_wrap;
+	kgfw_graphics_texture_filtering_enum filtering;
+} kgfw_graphics_texture_t;
+
 typedef struct kgfw_graphics_mesh {
 	kgfw_graphics_vertex_t * vertices;
 	unsigned long long int vertices_count;
@@ -64,6 +89,7 @@ KGFW_PUBLIC kgfw_window_t * kgfw_graphics_get_window(void);
 KGFW_PUBLIC void kgfw_graphics_draw(void);
 KGFW_PUBLIC void kgfw_graphics_viewport(unsigned int width, unsigned int height);
 KGFW_PUBLIC kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, kgfw_graphics_mesh_node_t * parent);
+KGFW_PUBLIC void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture);
 KGFW_PUBLIC void kgfw_graphics_deinit(void);
 KGFW_PUBLIC void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsigned int settings);
 KGFW_PUBLIC unsigned int kgfw_graphics_settings_get(void);
