@@ -2,8 +2,8 @@
 
 in vec3 v_pos;
 in vec3 v_color;
-in vec3 v_normal;
 in vec2 v_uv;
+in mat3 v_tbn;
 uniform float unif_time;
 uniform vec3 unif_view_pos;
 uniform vec3 unif_light_pos;
@@ -13,11 +13,13 @@ uniform float unif_diffusion;
 uniform float unif_speculation;
 uniform float unif_metalic;
 uniform float unif_texture_weight;
+uniform float unif_normal_weight;
 uniform sampler2D unif_texture_color;
+uniform sampler2D unif_texture_normal;
 out vec4 out_color;
 
 void main() {
-	vec3 normal = normalize(v_normal);
+	vec3 normal = normalize(v_tbn[2]);//normalize(v_tbn * vec3(texture(unif_texture_normal, v_uv)));
 	vec3 light_dir = normalize(unif_light_pos - v_pos);
 	vec3 view_dir = normalize(unif_view_pos - v_pos);
 	float dist = distance(unif_view_pos, v_pos);
@@ -31,12 +33,14 @@ void main() {
 	vec3 specular_color = unif_light_color;
 	float speculation = unif_speculation * pow(max(dot(normal, H), 0.0), unif_metalic);
 
-	vec3 color = (ambient_color * unif_ambience) + (diffuse_color * diffusion) + (specular_color * speculation);
 	vec4 tex_color;
 	if (unif_texture_weight == 0) {
 		tex_color = vec4(1, 1, 1, 1);
 	} else {
 		tex_color = texture(unif_texture_color, v_uv);
 	}
-	out_color = mix(vec4(v_color * color, 1), tex_color, unif_texture_weight);
+	
+	vec3 color = (ambient_color * unif_ambience) + (diffuse_color * diffusion) + (specular_color * speculation);
+	//out_color = texture(unif_texture_normal, v_uv) + texture(unif_texture_color, v_uv);
+	out_color = vec4(color, 1);
 }

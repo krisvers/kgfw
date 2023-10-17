@@ -1,6 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include "kgfw/kgfw.h"
+#include "kgfw/ktga/ktga.h"
 #ifndef KGFW_WINDOWS
 #include <unistd.h>
 #endif
@@ -63,15 +65,15 @@ int main(int argc, char ** argv) {
 
 	{
 		kgfw_graphics_vertex_t vertices[] = {
-			{  1.0f,  1.0f, -1.0f,	1.0f, 1.0f, 0.0f,	 1.0f,  1.0f, -1.0f,	1, 0 },
-			{ -1.0f, -1.0f, -1.0f,	0.0f, 0.0f, 0.0f,	-1.0f, -1.0f, -1.0f,	1, 0 },
-			{ -1.0f,  1.0f, -1.0f,	0.0f, 1.0f, 0.0f,	-1.0f,  1.0f, -1.0f,	1, 0 },
-			{  1.0f, -1.0f, -1.0f,	1.0f, 0.0f, 0.0f,	 1.0f, -1.0f, -1.0f,	1, 0 },
+			{  1.0f,  1.0f, -1.0f,	1.0f, 1.0f, 1.0f,	0.0f, 0.0f, 1.0f,	1, 1,	-1, 0, 0,	0, 1, 0, },
+			{ -1.0f, -1.0f, -1.0f,	1.0f, 1.0f, 1.0f,	0.0f, 0.0f, 1.0f,	0, 0,	-1, 0, 0,	0, 1, 0, },
+			{ -1.0f,  1.0f, -1.0f,	1.0f, 1.0f, 1.0f,	0.0f, 0.0f, 1.0f,	0, 1,	-1, 0, 0,	0, 1, 0, },
+			{  1.0f, -1.0f, -1.0f,	1.0f, 1.0f, 1.0f,	0.0f, 0.0f, 1.0f,	1, 0,	-1, 0, 0,	0, 1, 0, },
 
-			{  1.0f,  1.0f,  1.0f,	1.0f, 1.0f, 1.0f,	 1.0f,  1.0f,  1.0f,	1, 0 },
-			{ -1.0f, -1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	-1.0f, -1.0f,  1.0f,	1, 0 },
-			{ -1.0f,  1.0f,  1.0f,	0.0f, 1.0f, 1.0f,	-1.0f,  1.0f,  1.0f,	1, 0 },
-			{  1.0f, -1.0f,  1.0f,	1.0f, 0.0f, 1.0f,	 1.0f, -1.0f,  1.0f,	1, 0 },
+			{  1.0f,  1.0f,  1.0f,	1.0f, 1.0f, 1.0f,	0.0f, 0.0f, -1.0f,	1, 1,	-1, 0, 0,	0, 1, 0, },
+			{ -1.0f, -1.0f,  1.0f,	1.0f, 1.0f, 1.0f,	0.0f, 0.0f, -1.0f,	0, 0,	-1, 0, 0,	0, 1, 0, },
+			{ -1.0f,  1.0f,  1.0f,	1.0f, 1.0f, 1.0f,	0.0f, 0.0f, -1.0f,	0, 1,	-1, 0, 0,	0, 1, 0, },
+			{  1.0f, -1.0f,  1.0f,	1.0f, 1.0f, 1.0f,	0.0f, 0.0f, -1.0f,	1, 0,	-1, 0, 0,	0, 1, 0, },
 		};
 
 		unsigned int indices[] = {
@@ -97,7 +99,7 @@ int main(int argc, char ** argv) {
 		kgfw_graphics_mesh_t mesh = {
 			vertices, sizeof(vertices) / sizeof(kgfw_graphics_vertex_t), indices, sizeof(indices) / sizeof(unsigned int)
 		};
-		mesh.pos[0] = 0; mesh.pos[1] = 0; mesh.pos[2] = 5;
+		mesh.pos[0] = 0; mesh.pos[1] = 0; mesh.pos[2] = -5;
 		mesh.rot[0] = 0; mesh.rot[1] = 0; mesh.rot[2] = 0;
 		mesh.scale[0] = 1; mesh.scale[1] = 1; mesh.scale[2] = 1;
 
@@ -110,26 +112,106 @@ int main(int argc, char ** argv) {
 
 		mesh.scale[0] *= 3;
 		mesh.pos[0] += 10;
-		kgfw_graphics_texture_t tex {
-			buf,
-			1, 1,
+
+		ktga_t tga;
+		{
+			FILE * fp = fopen("./assets/tex/color.tga", "rb");
+			if (fp == NULL) {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to open \"./assets/tex/color.tga\"");
+				return 1;
+			}
+
+			fseek(fp, 0L, SEEK_END);
+			unsigned long long int size = ftell(fp);
+			fseek(fp, 0L, SEEK_SET);
+
+			void * buffer = malloc(size);
+			if (buffer == NULL) {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to alloc buffer for \"./assets/tex/color.tga\"");
+				return 1;
+			}
+			unsigned long long int s = fread(buffer, 1, size, fp);
+			if (s != size) {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to read from \"./assets/tex/color.tga\" %llu %llu", s, size);
+				return 1;
+			}
+
+			fclose(fp);
+
+			ktga_load(&tga, buffer, size);
+			free(buffer);
+		}
+
+		kgfw_graphics_texture_t tex = {
+			tga.bitmap,
+			tga.header.img_w, tga.header.img_h,
 			KGFW_GRAPHICS_TEXTURE_FORMAT_RGBA,
+			KGFW_GRAPHICS_TEXTURE_WRAP_REPEAT,
+			KGFW_GRAPHICS_TEXTURE_WRAP_REPEAT,
+			KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
 		};
-		kgfw_graphics_mesh_texture(kgfw_graphics_mesh_new(&mesh, NULL), &tex);
+
+		{
+			FILE * fp = fopen("./assets/tex/normal.tga", "rb");
+			if (fp == NULL) {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to open \"./assets/tex/normal.tga\"");
+				return 1;
+			}
+
+			fseek(fp, 0L, SEEK_END);
+			unsigned long long int size = ftell(fp);
+			fseek(fp, 0L, SEEK_SET);
+
+			void * buffer = malloc(size);
+			if (buffer == NULL) {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to alloc buffer for \"./assets/tex/normal.tga\"");
+				return 1;
+			}
+			unsigned long long int s = fread(buffer, 1, size, fp);
+			if (s != size) {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to read from \"./assets/tex/normal.tga\" %llu %llu", s, size);
+				return 1;
+			}
+
+			fclose(fp);
+
+			ktga_load(&tga, buffer, size);
+			free(buffer);
+		}
+
+		kgfw_graphics_texture_t norm = {
+			tga.bitmap,
+			tga.header.img_w, tga.header.img_h,
+			KGFW_GRAPHICS_TEXTURE_FORMAT_RGBA,
+			KGFW_GRAPHICS_TEXTURE_WRAP_REPEAT,
+			KGFW_GRAPHICS_TEXTURE_WRAP_REPEAT,
+			KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
+		};
+
+		kgfw_graphics_mesh_node_t * m = kgfw_graphics_mesh_new(&mesh, NULL);
+		kgfw_graphics_mesh_texture(m, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+		kgfw_graphics_mesh_texture(m, &norm, KGFW_GRAPHICS_TEXTURE_USE_NORMAL);
 
 		mesh.scale[1] *= 3;
 		mesh.pos[1] += 10;
-		kgfw_graphics_mesh_new(&mesh, NULL);
+		m = kgfw_graphics_mesh_new(&mesh, NULL);
+		kgfw_graphics_mesh_texture(m, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+		kgfw_graphics_mesh_texture(m, &norm, KGFW_GRAPHICS_TEXTURE_USE_NORMAL);
 
 		mesh.scale[2] *= 3;
 		mesh.pos[2] += 10;
-		kgfw_graphics_mesh_new(&mesh, NULL);
+		m = kgfw_graphics_mesh_new(&mesh, NULL);
+		kgfw_graphics_mesh_texture(m, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+		kgfw_graphics_mesh_texture(m, &norm, KGFW_GRAPHICS_TEXTURE_USE_NORMAL);
 
 		mesh.pos[1] = -10;
 		mesh.scale[0] = 20;
-		mesh.scale[1] = 1;
-		mesh.scale[2] = 20;
-		kgfw_graphics_mesh_new(&mesh, NULL);
+		mesh.scale[1] = 20;
+		mesh.scale[2] = 1;
+		mesh.rot[0] = 90;
+		m = kgfw_graphics_mesh_new(&mesh, NULL);
+		kgfw_graphics_mesh_texture(m, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+		kgfw_graphics_mesh_texture(m, &norm, KGFW_GRAPHICS_TEXTURE_USE_NORMAL);
 	}
 
 	if (kgfw_console_init() != 0) {
@@ -316,11 +398,11 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 	vec3 forward;
 	up[0] = 0; up[1] = 1; up[2] = 0;
 	right[0] = 0; right[1] = 0; right[2] = 0;
-	forward[0] = sinf(mstate->camera->rot[1] * 3.141592f / 180.0f); forward[1] = 0; forward[2] = cosf(mstate->camera->rot[1] * 3.141592f / 180.0f);
+	forward[0] = -sinf(mstate->camera->rot[1] * 3.141592f / 180.0f); forward[1] = 0; forward[2] = cosf(mstate->camera->rot[1] * 3.141592f / 180.0f);
 	vec3_mul_cross(right, up, forward);
 	vec3_scale(up, up, move_speed * delta);
 	vec3_scale(right, right, move_speed * delta);
-	vec3_scale(forward, forward, move_speed * delta);
+	vec3_scale(forward, forward, -move_speed * delta);
 
 	if (kgfw_input_key(KGFW_KEY_W)) {
 		vec3_add(mstate->camera->pos, mstate->camera->pos, forward);

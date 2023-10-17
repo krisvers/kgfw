@@ -105,6 +105,7 @@ int kgfw_audio_init(void) {
 
 		fclose(fp);
 	}
+
 	koml_table_t ktable;
 	if (koml_table_load(&ktable, file.buffer, file.size) != 0) {
 		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to load koml table from \"config.koml\"");

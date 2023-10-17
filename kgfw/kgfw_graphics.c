@@ -46,6 +46,7 @@ typedef struct mesh_node {
 		GLuint ibo;
 		GLuint program;
 		GLuint tex;
+		GLuint normal;
 
 		unsigned long long int vbo_size;
 		unsigned long long int ibo_size;
@@ -81,7 +82,7 @@ struct {
 	{
 		{ 0, 100, 0 },
 		{ 1, 1, 1 },
-		0.25f, 0.5f, 0.25f, 8
+		0.0f, 0.5f, 0.25f, 8
 	}
 };
 
@@ -322,7 +323,10 @@ void kgfw_graphics_draw(void) {
 	kgfw_camera_perspective(state.camera, p);
 
 	mat4x4_mul(state.vp, p, v);
-	
+
+	state.light.pos[0] = state.camera->pos[0];
+	state.light.pos[1] = state.camera->pos[1];
+	state.light.pos[2] = state.camera->pos[2];
 	if (state.mesh_root != NULL) {
 		mat4x4_identity(recurse_state.model);
 
@@ -340,21 +344,29 @@ void kgfw_graphics_draw(void) {
 	}
 }
 
-void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture) {
+void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture, kgfw_graphics_texture_use_enum use) {
 	mesh_node_t * m = (mesh_node_t *) mesh;
 	GLenum fmt = (texture->fmt == KGFW_GRAPHICS_TEXTURE_FORMAT_RGBA) ? GL_RGBA : GL_BGRA;
 	GLenum filtering = (texture->fmt == KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST) ? GL_NEAREST : GL_LINEAR;
 	GLenum u_wrap = (texture->u_wrap == KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP) ? GL_CLAMP_TO_BORDER : GL_REPEAT;
 	GLenum v_wrap = (texture->v_wrap == KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP) ? GL_CLAMP_TO_BORDER : GL_REPEAT;
-	if (m->gl.tex == 0) {
-		GL_CALL(glGenTextures(1, &m->gl.tex));
+	GLuint * t = NULL;
+	if (use == KGFW_GRAPHICS_TEXTURE_USE_COLOR) {
+		t = &m->gl.tex;
+	} else if (use == KGFW_GRAPHICS_TEXTURE_USE_NORMAL) {
+		t = &m->gl.normal;
 	}
-	GL_CALL(glBindTexture(GL_TEXTURE_2D, m->gl.tex));
+
+	if (*t == 0) {
+		GL_CALL(glGenTextures(1, t));
+	}
+	
+	GL_CALL(glBindTexture(GL_TEXTURE_2D, *t));
 	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, u_wrap));
 	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, v_wrap));
 	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filtering));
 	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filtering));
-	GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, fmt, texture->width, texture->height, 0, fmt, GL_UNSIGNED_BYTE, texture->bitmap));
+	GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture->width, texture->height, 0, GL_BGRA, GL_UNSIGNED_BYTE, texture->bitmap));
 	GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
 }
 
@@ -376,10 +388,14 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 	GL_CALL(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, r)));
 	GL_CALL(glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, nx)));
 	GL_CALL(glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, u)));
+	GL_CALL(glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, tx)));
+	GL_CALL(glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, btx)));
 	GL_CALL(glEnableVertexAttribArray(0));
 	GL_CALL(glEnableVertexAttribArray(1));
 	GL_CALL(glEnableVertexAttribArray(2));
 	GL_CALL(glEnableVertexAttribArray(3));
+	GL_CALL(glEnableVertexAttribArray(4));
+	GL_CALL(glEnableVertexAttribArray(5));
 
 	if (parent == NULL) {
 		if (state.mesh_root == NULL) {
@@ -458,6 +474,9 @@ static void meshes_free(mesh_node_t * node) {
 	if (node->gl.tex != 0) {
 		GL_CALL(glDeleteTextures(1, &node->gl.tex));
 	}
+	if (node->gl.normal != 0) {
+		GL_CALL(glDeleteTextures(1, &node->gl.normal));
+	}
 
 	free(node);
 }
@@ -467,6 +486,7 @@ static void meshes_gen(mesh_node_t * node) {
 	GL_CALL(glGenBuffers(1, &node->gl.vbo));
 	GL_CALL(glGenBuffers(1, &node->gl.ibo));
 	node->gl.tex = 0;
+	node->gl.normal = 0;
 }
 
 static mesh_node_t * meshes_new(void) {
@@ -481,18 +501,19 @@ static mesh_node_t * meshes_new(void) {
 
 static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
 	if (mesh->transform.absolute) {
-		recurse_state.pos[0] = 0;
-		recurse_state.pos[1] = 0;
-		recurse_state.pos[2] = 0;
-		recurse_state.rot[0] = 0;
-		recurse_state.rot[1] = 0;
-		recurse_state.rot[2] = 0;
-		recurse_state.scale[0] = 1;
-		recurse_state.scale[1] = 1;
-		recurse_state.scale[2] = 1;
 		mat4x4_identity(out_m);
-		mat4x4_translate(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], -recurse_state.pos[0] - mesh->transform.pos[2]);
+		mat4x4_translate(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[0] + mesh->transform.pos[2]);
+		recurse_state.pos[0] = mesh->transform.pos[0];
+		recurse_state.pos[1] = mesh->transform.pos[1];
+		recurse_state.pos[2] = mesh->transform.pos[2];
+		recurse_state.rot[0] = mesh->transform.rot[0];
+		recurse_state.rot[1] = mesh->transform.rot[1];
+		recurse_state.rot[2] = mesh->transform.rot[2];
+		recurse_state.scale[0] = mesh->transform.scale[0];
+		recurse_state.scale[1] = mesh->transform.scale[1];
+		recurse_state.scale[2] = mesh->transform.scale[2];
 	} else {
+		mat4x4_translate_in_place(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[2] + mesh->transform.pos[2]);
 		recurse_state.pos[0] += mesh->transform.pos[0];
 		recurse_state.pos[1] += mesh->transform.pos[1];
 		recurse_state.pos[2] += mesh->transform.pos[2];
@@ -502,12 +523,11 @@ static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
 		recurse_state.scale[0] *= mesh->transform.scale[0];
 		recurse_state.scale[1] *= mesh->transform.scale[1];
 		recurse_state.scale[2] *= mesh->transform.scale[2];
-		mat4x4_translate_in_place(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], -recurse_state.pos[2] - mesh->transform.pos[2]);
 	}
-	mat4x4_rotate_X(out_m, out_m, (recurse_state.rot[0] + mesh->transform.rot[0]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Y(out_m, out_m, (recurse_state.rot[1] + mesh->transform.rot[1]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Z(out_m, out_m, (recurse_state.rot[2] + mesh->transform.rot[2]) * 3.141592f / 180.0f);
-	mat4x4_scale_aniso(out_m, out_m, recurse_state.scale[0] * mesh->transform.scale[0], recurse_state.scale[1] * mesh->transform.scale[1], recurse_state.scale[2] * mesh->transform.scale[2]);
+	mat4x4_rotate_X(out_m, out_m, (recurse_state.rot[0]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Y(out_m, out_m, (recurse_state.rot[1]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Z(out_m, out_m, (recurse_state.rot[2]) * 3.141592f / 180.0f);
+	mat4x4_scale_aniso(out_m, out_m, recurse_state.scale[0], recurse_state.scale[1], recurse_state.scale[2]);
 }
 
 static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
@@ -532,6 +552,8 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	GLint uniform_metalic = GL_CALL(glGetUniformLocation(state.program, "unif_metalic"));
 	GLint uniform_texture_weight = GL_CALL(glGetUniformLocation(state.program, "unif_texture_weight"));
 	GLint uniform_texture_color = GL_CALL(glGetUniformLocation(state.program, "unif_texture_color"));
+	GLint uniform_normal_weight = GL_CALL(glGetUniformLocation(state.program, "unif_normal_weight"));
+	GLint uniform_texture_normal = GL_CALL(glGetUniformLocation(state.program, "unif_texture_normal"));
 
 	mat4x4_identity(out_m);
 	mesh_transform(mesh, out_m);
@@ -539,22 +561,40 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	GL_CALL(glUniformMatrix4fv(uniform_model, 1, GL_FALSE, &out_m[0][0]));
 	GL_CALL(glUniformMatrix4fv(uniform_vp, 1, GL_FALSE, &state.vp[0][0]));
 	GL_CALL(glUniform1f(uniform_time, kgfw_time_get()));
-	GL_CALL(glUniform3f(uniform_view, state.camera->pos[0], state.camera->pos[1], -state.camera->pos[2]));
-	GL_CALL(glUniform3f(uniform_light, state.light.pos[0], state.light.pos[1], -state.light.pos[2]));
+	GL_CALL(glUniform3f(uniform_view, state.camera->pos[0], state.camera->pos[1], state.camera->pos[2]));
+	GL_CALL(glUniform3f(uniform_light, state.light.pos[0], state.light.pos[1], state.light.pos[2]));
 	GL_CALL(glUniform3f(uniform_light_color, state.light.color[0], state.light.color[1], state.light.color[2]));
 	GL_CALL(glUniform1f(uniform_ambience, state.light.ambience));
 	GL_CALL(glUniform1f(uniform_diffusion, state.light.diffusion));
 	GL_CALL(glUniform1f(uniform_speculation, state.light.speculation));
 	GL_CALL(glUniform1f(uniform_metalic, state.light.metalic));
+
 	if (mesh->gl.tex == 0) {
+		GL_CALL(glUniform1i(uniform_texture_color, 0));
 		GL_CALL(glActiveTexture(GL_TEXTURE0));
 		GL_CALL(glBindTexture(GL_TEXTURE_2D, 0));
-		GL_CALL(glUniform1f(uniform_texture_weight, 0));
-	} else {
+		GL_CALL(glUniform1f(uniform_normal_weight, 0));
+	}
+	else {
+		GL_CALL(glUniform1i(uniform_texture_color, 0));
 		GL_CALL(glActiveTexture(GL_TEXTURE0));
 		GL_CALL(glBindTexture(GL_TEXTURE_2D, mesh->gl.tex));
 		GL_CALL(glUniform1f(uniform_texture_weight, 1));
 	}
+
+	GL_CALL(glUniform1i(uniform_texture_normal, 1));
+	if (mesh->gl.normal == 0) {
+		GL_CALL(glActiveTexture(GL_TEXTURE1));
+		GL_CALL(glBindTexture(GL_TEXTURE_2D, 0));
+		GL_CALL(glUniform1f(uniform_normal_weight, 0));
+	}
+	else {
+		GL_CALL(glUniform1i(uniform_texture_normal, 1));
+		GL_CALL(glActiveTexture(GL_TEXTURE1));
+		GL_CALL(glBindTexture(GL_TEXTURE_2D, mesh->gl.normal));
+		GL_CALL(glUniform1f(uniform_normal_weight, 1));
+	}
+
 	GL_CALL(glBindVertexArray(mesh->gl.vao));
 	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, mesh->gl.vbo));
 	GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->gl.ibo));
