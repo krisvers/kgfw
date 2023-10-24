@@ -85,7 +85,7 @@ typedef enum kgfw_graphics_settings {
 	KGFW_GRAPHICS_SETTINGS_VSYNC = 1,
 } kgfw_graphics_settings_enum;
 
-#define KGFW_GRAPHICS_SETTINGS_DEFAULT (0)
+#define KGFW_GRAPHICS_SETTINGS_DEFAULT (KGFW_GRAPHICS_SETTINGS_VSYNC)
 
 typedef enum kgfw_graphics_texture_use {
 	KGFW_GRAPHICS_TEXTURE_USE_COLOR,

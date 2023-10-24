@@ -7,6 +7,7 @@ layout (location = 3) in vec2 in_uv;
 layout (location = 4) in vec3 in_tangent;
 layout (location = 5) in vec3 in_bitangent;
 uniform mat4 unif_m;
+uniform mat4 unif_m_r;
 uniform mat4 unif_vp;
 out vec3 v_pos;
 out vec3 v_color;
@@ -18,7 +19,7 @@ void main() {
 	v_pos = vec3(unif_m * vec4(in_pos, 1.0));
 	v_color = in_color;
 	v_uv = in_uv;
-	v_tbn[0] = in_normal;
-	v_tbn[1] = in_tangent;
-	v_tbn[2] = in_bitangent;
+	v_tbn[0] = (vec4(in_normal, 1.0) * unif_m_r).xyz;
+	v_tbn[1] = (vec4(in_tangent, 1.0) * unif_m_r).xyz;
+	v_tbn[2] = (vec4(in_bitangent, 1.0) * unif_m_r).xyz;
 }

@@ -2,6 +2,7 @@
 #include "kgfw_log.h"
 #include "kwav/kwav.h"
 #include "koml/koml.h"
+#include "kgfw_hash.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,16 +37,6 @@ struct {
 #define AL_ERROR_CHECK(ret) { ALCenum error = alGetError(); if (error != AL_NO_ERROR) { kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "[OpenAL] error %i %x at (%s:%u)", error, error, __FILE__, __LINE__); return ret; } }
 #define AL_ERROR_CHECK_VOID() { ALCenum error = alGetError(); if (error != AL_NO_ERROR) { kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "[OpenAL] error %i %x at (%s:%u)", error, error, __FILE__, __LINE__); return; } }
 #define AL_ERROR_CHECK_NO_RETURN() { ALCenum error = alGetError(); if (error != AL_NO_ERROR) { kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "[OpenAL] error %i %x at (%s:%u)", error, error, __FILE__, __LINE__); } }
-
-static unsigned long long int internal_hash(char * string) {
-	unsigned long long int hash = 5381;
-
-	for (unsigned long long int i = 0; string[i] != '\0'; ++i) {
-		hash = (hash << 5) + hash + string[i];
-	}
-
-	return hash;
-}
 
 int kgfw_audio_init(void) {
 	memset(&state, 0, sizeof(state));
@@ -136,9 +127,9 @@ int kgfw_audio_init(void) {
 		};
 		for (unsigned long long int i = 0; i < files->data.array.length; ++i) {
 			if (names != NULL) {
-				state.buffers.names[i] = internal_hash(names->data.array.elements.string[i]);
+				state.buffers.names[i] = kgfw_hash(names->data.array.elements.string[i]);
 			} else {
-				state.buffers.names[i] = internal_hash(files->data.array.elements.string[i]);
+				state.buffers.names[i] = kgfw_hash(files->data.array.elements.string[i]);
 				kgfw_logf(KGFW_LOG_SEVERITY_WARN, "audio file %s has no given name, assuming file name", files->data.array.elements.string[i]);
 			}
 
@@ -219,7 +210,7 @@ int kgfw_audio_init(void) {
 }
 
 int kgfw_audio_load(char * filename, char * name) {
-	unsigned long long int hash = internal_hash(name);
+	unsigned long long int hash = kgfw_hash(name);
 	for (unsigned long long int i = 0; i < state.buffers.length; ++i) {
 		if (state.buffers.names[i] == hash) {
 			return -1;
@@ -346,7 +337,7 @@ void kgfw_audio_update(void) {
 }
 
 int kgfw_audio_play_sound(char * name, float x, float y, float z, float gain, float pitch, unsigned char loop, unsigned char relative) {
-	unsigned long long int hash = internal_hash(name);
+	unsigned long long int hash = kgfw_hash(name);
 	unsigned long long int bo = 0;
 	for (unsigned long long int i = 0; i < state.buffers.length; ++i) {
 		if (hash == state.buffers.names[i]) {

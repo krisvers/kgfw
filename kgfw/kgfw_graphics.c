@@ -88,6 +88,7 @@ struct {
 
 struct {
 	mat4x4 model;
+	mat4x4 model_r;
 	vec3 pos;
 	vec3 rot;
 	vec3 scale;
@@ -111,6 +112,8 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m);
 static void meshes_free_recursive_fchild(mesh_node_t * mesh);
 static void meshes_free_recursive(mesh_node_t * mesh);
 static void gl_errors(void);
+
+static int shaders_load(const char * vpath, const char * fpath, GLuint * out_program);
 
 void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsigned int settings) {
 	unsigned int change = 0;
@@ -163,143 +166,17 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		}
 	}
 
-	{
-		const GLchar * fallback_vshader =
-			"#version 330 core\n"
-			"layout(location = 0) in vec3 in_pos; layout(location = 1) in vec3 in_color; layout(location = 2) in vec3 in_normal; layout(location = 3) in vec2 in_uv; uniform mat4 unif_m; uniform mat4 unif_vp; out vec3 v_pos; out vec3 v_color; out vec3 v_normal; out vec2 v_uv; void main() { gl_Position = unif_vp * unif_m * vec4(in_pos, 1.0); v_pos = vec3(unif_m * vec4(in_pos, 1.0)); v_color = in_color; v_normal = in_normal; v_uv = in_uv; }";
-
-		const GLchar * fallback_fshader =
-			"#version 330 core\n"
-			"in vec3 v_pos; in vec3 v_color; in vec3 v_normal; in vec2 v_uv; out vec4 out_color; void main() { out_color = vec4(v_color, 1); }";
-
-		GLchar * vshader = (GLchar *) fallback_vshader;
-		GLchar * fshader = (GLchar *) fallback_fshader;
-
-		{
-			FILE * fp = fopen("assets/shaders/vertex.glsl", "rb");
-			unsigned long long int length = 0;
-			if (fp == NULL) {
-				kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load vertex shader from \"assets/shaders/vertex.glsl\" falling back to default shader");
-				vshader = (GLchar *) fallback_vshader;
-				goto load_fshader;
-			}
-
-			fseek(fp, 0L, SEEK_END);
-			length = ftell(fp);
-			fseek(fp, 0L, SEEK_SET);
-
-			vshader = malloc(length + 1);
-			if (vshader == NULL) {
-				length = 0;
-				fclose(fp);
-				kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load vertex shader from \"assets/shaders/vertex.glsl\" falling back to default shader");
-				vshader = (GLchar *) fallback_vshader;
-				goto load_fshader;
-			}
-
-			if (fread(vshader, 1, length, fp) != length) {
-				length = 0;
-				free(vshader);
-				fclose(fp);
-				kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load vertex shader from \"assets/shaders/vertex.glsl\" falling back to default shader");
-				vshader = (GLchar *) fallback_vshader;
-				goto load_fshader;
-			}
-			vshader[length] = '\0';
-
-			fclose(fp);
-
-		load_fshader:
-			fp = fopen("assets/shaders/fragment.glsl", "rb");
-			if (fp == NULL) {
-				kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load fragment shader from \"assets/shaders/fragment.glsl\" falling back to default shader");
-				fshader = (GLchar *) fallback_fshader;
-				goto end_fshader;
-			}
-
-			fseek(fp, 0L, SEEK_END);
-			length = ftell(fp);
-			fseek(fp, 0L, SEEK_SET);
-
-			fshader = malloc(length + 1);
-			if (fshader == NULL) {
-				length = 0;
-				fclose(fp);
-				kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load fragment shader from \"assets/shaders/fragment.glsl\" falling back to default shader");
-				fshader = (GLchar *) fallback_fshader;
-				goto end_fshader;
-			}
-
-			if (fread(fshader, 1, length, fp) != length) {
-				length = 0;
-				free(fshader);
-				fclose(fp);
-				kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load fragment shader from \"assets/shaders/fragment.glsl\" falling back to default shader");
-				fshader = (GLchar *) fallback_fshader;
-				goto end_fshader;
-			}
-			fshader[length] = '\0';
-
-			fclose(fp);
-
-		end_fshader:;
-		}
-
-		state.vshader = GL_CALL(glCreateShader(GL_VERTEX_SHADER));
-		GL_CALL(glShaderSource(state.vshader, 1, (const GLchar * const *) &vshader, NULL));
-		GL_CALL(glCompileShader(state.vshader));
-
-		GLint success = GL_TRUE;
-		GL_CALL(glGetShaderiv(state.vshader, GL_COMPILE_STATUS, &success));
-		if (success == GL_FALSE) {
-			char msg[512];
-			GL_CALL(glGetShaderInfoLog(state.vshader, 512, NULL, msg));
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided vertex shader compilation error: %s", msg);
-
-		vfallback_compilation:
-			vshader = (GLchar *) fallback_vshader;
-			GL_CALL(glShaderSource(state.vshader, 1, (const GLchar * const *) &vshader, NULL));
-			GL_CALL(glCompileShader(state.vshader));
-			GL_CALL(glGetShaderiv(state.vshader, GL_COMPILE_STATUS, &success));
-			if (success == GL_FALSE) {
-				GL_CALL(glGetShaderInfoLog(state.vshader, 512, NULL, msg));
-				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback vertex shader compilation error: %s", msg);
-				return 2;
-			}
-		}
-
-		state.fshader = GL_CALL(glCreateShader(GL_FRAGMENT_SHADER));
-		GL_CALL(glShaderSource(state.fshader, 1, (const GLchar * const *) &fshader, NULL));
-		GL_CALL(glCompileShader(state.fshader));
-		
-		GL_CALL(glGetShaderiv(state.fshader, GL_COMPILE_STATUS, &success));
-		if (success == GL_FALSE) {
-			char msg[512];
-			GL_CALL(glGetShaderInfoLog(state.fshader, 512, NULL, msg));
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided fragment shader compilation error: %s", msg);
-
-		ffallback_compilation:
-			fshader = (GLchar *) fallback_fshader;
-			GL_CALL(glShaderSource(state.fshader, 1, (const GLchar * const *) &fshader, NULL));
-			GL_CALL(glCompileShader(state.fshader));
-			GL_CALL(glGetShaderiv(state.fshader, GL_COMPILE_STATUS, &success));
-			if (success == GL_FALSE) {
-				GL_CALL(glGetShaderInfoLog(state.fshader, 512, NULL, msg));
-				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback fragment shader compilation error: %s", msg);
-				return 2;
-			}
-		}
+	state.program = GL_CALL(glCreateProgram());
+	int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
+	if (r != 0) {
+		return r;
 	}
 
-	state.program = GL_CALL(glCreateProgram());
-	GL_CALL(glAttachShader(state.program, state.vshader));
-	GL_CALL(glAttachShader(state.program, state.fshader));
-	GL_CALL(glLinkProgram(state.program));
-	GL_CALL(glUseProgram(state.program));
-
 	GL_CALL(glEnable(GL_DEPTH_TEST));
-	GL_CALL(glEnable(GL_FRAMEBUFFER_SRGB));
+	//GL_CALL(glEnable(GL_FRAMEBUFFER_SRGB));
 	//GL_CALL(glPolygonMode(GL_FRONT_AND_BACK, GL_LINE));
+
+	update_settings(state.settings);
 
 	return 0;
 }
@@ -324,9 +201,9 @@ void kgfw_graphics_draw(void) {
 
 	mat4x4_mul(state.vp, p, v);
 
-	state.light.pos[0] = state.camera->pos[0];
-	state.light.pos[1] = state.camera->pos[1];
-	state.light.pos[2] = state.camera->pos[2];
+	state.light.pos[0] = sinf(kgfw_time_get() * 2) * 10;
+	state.light.pos[1] = cosf(kgfw_time_get() / 6) * 15;
+	state.light.pos[2] = sinf(kgfw_time_get() + 3) * 10;
 	if (state.mesh_root != NULL) {
 		mat4x4_identity(recurse_state.model);
 
@@ -347,7 +224,8 @@ void kgfw_graphics_draw(void) {
 void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture, kgfw_graphics_texture_use_enum use) {
 	mesh_node_t * m = (mesh_node_t *) mesh;
 	GLenum fmt = (texture->fmt == KGFW_GRAPHICS_TEXTURE_FORMAT_RGBA) ? GL_RGBA : GL_BGRA;
-	GLenum filtering = (texture->fmt == KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST) ? GL_NEAREST : GL_LINEAR;
+	GLenum filtering = (texture->filtering == KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST) ? GL_NEAREST : GL_LINEAR;
+	GLenum filtering_mipmap = (texture->filtering == KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR;
 	GLenum u_wrap = (texture->u_wrap == KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP) ? GL_CLAMP_TO_BORDER : GL_REPEAT;
 	GLenum v_wrap = (texture->v_wrap == KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP) ? GL_CLAMP_TO_BORDER : GL_REPEAT;
 	GLuint * t = NULL;
@@ -364,8 +242,8 @@ void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_
 	GL_CALL(glBindTexture(GL_TEXTURE_2D, *t));
 	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, u_wrap));
 	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, v_wrap));
-	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filtering));
 	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filtering));
+	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filtering_mipmap));
 	GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture->width, texture->height, 0, GL_BGRA, GL_UNSIGNED_BYTE, texture->bitmap));
 	GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
 }
@@ -524,9 +402,13 @@ static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
 		recurse_state.scale[1] *= mesh->transform.scale[1];
 		recurse_state.scale[2] *= mesh->transform.scale[2];
 	}
+	mat4x4_identity(recurse_state.model_r);
 	mat4x4_rotate_X(out_m, out_m, (recurse_state.rot[0]) * 3.141592f / 180.0f);
 	mat4x4_rotate_Y(out_m, out_m, (recurse_state.rot[1]) * 3.141592f / 180.0f);
 	mat4x4_rotate_Z(out_m, out_m, (recurse_state.rot[2]) * 3.141592f / 180.0f);
+	mat4x4_rotate_X(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[0]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Y(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[1]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Z(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[2]) * 3.141592f / 180.0f);
 	mat4x4_scale_aniso(out_m, out_m, recurse_state.scale[0], recurse_state.scale[1], recurse_state.scale[2]);
 }
 
@@ -541,6 +423,7 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	GLuint program = (mesh->gl.program == 0) ? state.program : mesh->gl.program;
 	GL_CALL(glUseProgram(program));
 	GLint uniform_model = GL_CALL(glGetUniformLocation(state.program, "unif_m"));
+	GLint uniform_model_r = GL_CALL(glGetUniformLocation(state.program, "unif_m_r"));
 	GLint uniform_vp = GL_CALL(glGetUniformLocation(state.program, "unif_vp"));
 	GLint uniform_time = GL_CALL(glGetUniformLocation(state.program, "unif_time"));
 	GLint uniform_view = GL_CALL(glGetUniformLocation(state.program, "unif_view_pos"));
@@ -559,6 +442,7 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	mesh_transform(mesh, out_m);
 
 	GL_CALL(glUniformMatrix4fv(uniform_model, 1, GL_FALSE, &out_m[0][0]));
+	GL_CALL(glUniformMatrix4fv(uniform_model_r, 1, GL_FALSE, &recurse_state.model_r[0][0]));
 	GL_CALL(glUniformMatrix4fv(uniform_vp, 1, GL_FALSE, &state.vp[0][0]));
 	GL_CALL(glUniform1f(uniform_time, kgfw_time_get()));
 	GL_CALL(glUniform3f(uniform_view, state.camera->pos[0], state.camera->pos[1], state.camera->pos[2]));
@@ -569,14 +453,13 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	GL_CALL(glUniform1f(uniform_speculation, state.light.speculation));
 	GL_CALL(glUniform1f(uniform_metalic, state.light.metalic));
 
+	GL_CALL(glUniform1i(uniform_texture_color, 0));
 	if (mesh->gl.tex == 0) {
-		GL_CALL(glUniform1i(uniform_texture_color, 0));
 		GL_CALL(glActiveTexture(GL_TEXTURE0));
 		GL_CALL(glBindTexture(GL_TEXTURE_2D, 0));
 		GL_CALL(glUniform1f(uniform_normal_weight, 0));
 	}
 	else {
-		GL_CALL(glUniform1i(uniform_texture_color, 0));
 		GL_CALL(glActiveTexture(GL_TEXTURE0));
 		GL_CALL(glBindTexture(GL_TEXTURE_2D, mesh->gl.tex));
 		GL_CALL(glUniform1f(uniform_texture_weight, 1));
@@ -589,7 +472,6 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 		GL_CALL(glUniform1f(uniform_normal_weight, 0));
 	}
 	else {
-		GL_CALL(glUniform1i(uniform_texture_normal, 1));
 		GL_CALL(glActiveTexture(GL_TEXTURE1));
 		GL_CALL(glBindTexture(GL_TEXTURE_2D, mesh->gl.normal));
 		GL_CALL(glUniform1f(uniform_normal_weight, 1));
@@ -693,7 +575,12 @@ static int gfx_command(int argc, char ** argv) {
 		}
 
 		if (strcmp("shaders", argv[2]) == 0) {
-			
+			GL_CALL(glDeleteProgram(state.program));
+			state.program = GL_CALL(glCreateProgram());
+			int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
+			if (r != 0) {
+				return r;
+			}
 			return 0;
 		}
 
@@ -749,4 +636,123 @@ static void gl_errors(void) {
 		}
 		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "err %i", err);
 	}
+}
+
+static int shaders_load(const char * vpath, const char * fpath, GLuint * out_program) {
+	const GLchar * fallback_vshader =
+		"#version 330 core\n"
+		"layout(location = 0) in vec3 in_pos; layout(location = 1) in vec3 in_color; layout(location = 2) in vec3 in_normal; layout(location = 3) in vec2 in_uv; uniform mat4 unif_m; uniform mat4 unif_vp; out vec3 v_pos; out vec3 v_color; out vec3 v_normal; out vec2 v_uv; void main() { gl_Position = unif_vp * unif_m * vec4(in_pos, 1.0); v_pos = vec3(unif_m * vec4(in_pos, 1.0)); v_color = in_color; v_normal = in_normal; v_uv = in_uv; }";
+	const GLchar * fallback_fshader =
+		"#version 330 core\n"
+		"in vec3 v_pos; in vec3 v_color; in vec3 v_normal; in vec2 v_uv; out vec4 out_color; void main() { out_color = vec4(v_color, 1); }";
+
+	GLchar * vshader = (GLchar *) fallback_vshader;
+	GLchar * fshader = (GLchar *) fallback_fshader;
+	{
+		FILE * fp = fopen(vpath, "rb");
+		unsigned long long int length = 0;
+		if (fp == NULL) {
+			kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load vertex shader from \"assets/shaders/vertex.glsl\" falling back to default shader");
+			vshader = (GLchar *) fallback_vshader;
+			goto load_fshader;
+		}
+		fseek(fp, 0L, SEEK_END);
+		length = ftell(fp);
+		fseek(fp, 0L, SEEK_SET);
+		vshader = malloc(length + 1);
+		if (vshader == NULL) {
+			length = 0;
+			fclose(fp);
+			kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load vertex shader from \"%s\" falling back to default shader", vpath);
+			vshader = (GLchar *) fallback_vshader;
+			goto load_fshader;
+		}
+		if (fread(vshader, 1, length, fp) != length) {
+			length = 0;
+			free(vshader);
+			fclose(fp);
+			kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load vertex shader from \"%s\" falling back to default shader", vpath);
+			vshader = (GLchar *) fallback_vshader;
+			goto load_fshader;
+		}
+		vshader[length] = '\0';
+		fclose(fp);
+	load_fshader:
+		fp = fopen(fpath, "rb");
+		if (fp == NULL) {
+			kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load fragment shader from \"%s\" falling back to default shader", fpath);
+			fshader = (GLchar *) fallback_fshader;
+			goto end_fshader;
+		}
+		fseek(fp, 0L, SEEK_END);
+		length = ftell(fp);
+		fseek(fp, 0L, SEEK_SET);
+		fshader = malloc(length + 1);
+		if (fshader == NULL) {
+			length = 0;
+			fclose(fp);
+			kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load fragment shader from \"%s\" falling back to default shader", fpath);
+			fshader = (GLchar *) fallback_fshader;
+			goto end_fshader;
+		}
+		if (fread(fshader, 1, length, fp) != length) {
+			length = 0;
+			free(fshader);
+			fclose(fp);
+			kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load fragment shader from \"%s\" falling back to default shader", fpath);
+			fshader = (GLchar *) fallback_fshader;
+			goto end_fshader;
+		}
+		fshader[length] = '\0';
+		fclose(fp);
+	end_fshader:;
+	}
+	GLuint vert = GL_CALL(glCreateShader(GL_VERTEX_SHADER));
+	GL_CALL(glShaderSource(vert, 1, (const GLchar * const *) &vshader, NULL));
+	GL_CALL(glCompileShader(vert));
+	GLint success = GL_TRUE;
+	GL_CALL(glGetShaderiv(vert, GL_COMPILE_STATUS, &success));
+	if (success == GL_FALSE) {
+		char msg[512];
+		GL_CALL(glGetShaderInfoLog(vert, 512, NULL, msg));
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided vertex shader compilation error: %s", msg);
+	vfallback_compilation:
+		vshader = (GLchar *) fallback_vshader;
+		GL_CALL(glShaderSource(vert, 1, (const GLchar * const *) &vshader, NULL));
+		GL_CALL(glCompileShader(vert));
+		GL_CALL(glGetShaderiv(vert, GL_COMPILE_STATUS, &success));
+		if (success == GL_FALSE) {
+			GL_CALL(glGetShaderInfoLog(vert, 512, NULL, msg));
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback vertex shader compilation error: %s", msg);
+			return 2;
+		}
+	}
+	GLuint frag = GL_CALL(glCreateShader(GL_FRAGMENT_SHADER));
+	GL_CALL(glShaderSource(frag, 1, (const GLchar * const *) &fshader, NULL));
+	GL_CALL(glCompileShader(frag));
+	
+	GL_CALL(glGetShaderiv(frag, GL_COMPILE_STATUS, &success));
+	if (success == GL_FALSE) {
+		char msg[512];
+		GL_CALL(glGetShaderInfoLog(frag, 512, NULL, msg));
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL user provided fragment shader compilation error: %s", msg);
+	ffallback_compilation:
+		fshader = (GLchar *) fallback_fshader;
+		GL_CALL(glShaderSource(frag, 1, (const GLchar * const *) &fshader, NULL));
+		GL_CALL(glCompileShader(frag));
+		GL_CALL(glGetShaderiv(frag, GL_COMPILE_STATUS, &success));
+		if (success == GL_FALSE) {
+			GL_CALL(glGetShaderInfoLog(frag, 512, NULL, msg));
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "OpenGL fallback fragment shader compilation error: %s", msg);
+			return 2;
+		}
+	}
+
+	GL_CALL(glAttachShader(*out_program, vert));
+	GL_CALL(glAttachShader(*out_program, frag));
+	GL_CALL(glLinkProgram(*out_program));
+	GL_CALL(glDeleteShader(vert));
+	GL_CALL(glDeleteShader(frag));
+
+	return 0;
 }

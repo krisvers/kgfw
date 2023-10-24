@@ -133,8 +133,17 @@ typedef enum kgfw_input_key_enum {
 	KGFW_KEY_MAX,
 } kgfw_input_key_enum;
 
+typedef enum kgfw_input_mouse_button_enum {
+	KGFW_MOUSE_LBUTTON = 0,
+	KGFW_MOUSE_RBUTTON,
+	KGFW_MOUSE_BUTTON_MAX,
+} kgfw_input_mouse_button_enum;
+
 /* takes key value and action value (0: immediate keyup, 1: immediate keydown, 2: repeated keydown, 3: repeated keyup) */
 typedef void (*kgfw_input_key_callback)(kgfw_input_key_enum key, unsigned char action);
+
+/* takes key value and action value (0: immediate keyup, 1: immediate keydown, 2: repeated keydown, 3: repeated keyup) */
+typedef void (*kgfw_input_mouse_button_callback)(kgfw_input_mouse_button_enum buttom, unsigned char action);
 
 KGFW_PUBLIC void kgfw_input_update(void);
 /* registers window input to redirect to main input */
@@ -147,9 +156,15 @@ KGFW_PUBLIC unsigned char kgfw_input_key_down(kgfw_input_key_enum key);
 KGFW_PUBLIC unsigned char kgfw_input_key_up(kgfw_input_key_enum key);
 /* outputs the difference between last frame's mouse position and the current frame's mouse position */
 KGFW_PUBLIC void kgfw_input_mouse_delta(float * out_dx, float * out_dy);
+/* outputs the scroll delta */
+KGFW_PUBLIC void kgfw_input_mouse_scroll(float * out_dx, float * out_dy);
 /* outputs the current mouse position */
 KGFW_PUBLIC void kgfw_input_mouse_pos(float * out_dx, float * out_dy);
+/* returns if button is currently pressed */
+KGFW_PUBLIC unsigned char kgfw_input_mouse_button(kgfw_input_mouse_button_enum button);
 /* register a callback for key input */
 KGFW_PUBLIC int kgfw_input_key_register_callback(kgfw_input_key_callback callback);
+/* register a callback for mouse button input */
+KGFW_PUBLIC int kgfw_input_mouse_button_register_callback(kgfw_input_mouse_button_callback callback);
 
 #endif

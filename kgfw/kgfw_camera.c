@@ -3,7 +3,7 @@
 
 void kgfw_camera_perspective(kgfw_camera_t * camera, mat4x4 outm) {
 	if (camera->ortho) {
-		mat4x4_ortho(outm, (camera->ratio - 1) * 5, (camera->ratio + 1) / 5, -10, 10, camera->nplane, camera->fplane);
+		mat4x4_ortho(outm, camera->ratio * -10 * camera->scale[0], camera->ratio * 10 * camera->scale[0], -10 * camera->scale[1], 10 * camera->scale[1], camera->nplane, camera->fplane);
 	} else {
 		mat4x4_perspective(outm, camera->fov * 3.141592f / 180.0f, camera->ratio, camera->nplane, camera->fplane);
 	}

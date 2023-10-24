@@ -1,3 +1,5 @@
 [audio]
-as files = "assets/jeff.wav", "assets/cantina.wav";
+as files = "assets/audio/jeff.wav", "assets/audio/cantina.wav";
 as names = "jeff", "cantina";
+
+[textures]

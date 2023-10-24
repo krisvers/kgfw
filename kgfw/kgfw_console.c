@@ -1,12 +1,12 @@
 #include "kgfw_console.h"
 #include "kgfw_input.h"
 #include "kgfw_log.h"
+#include "kgfw_hash.h"
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
 
 static void console_key_callback(kgfw_input_key_enum key, unsigned char action);
-static unsigned long long int internal_hash(char * string);
 static int help_command(int argc, char ** argv);
 
 #define COMMAND_NUM 512
@@ -45,7 +45,7 @@ int kgfw_console_run(int argc, char ** argv) {
 	if (argc < 1) {
 		return 1;
 	}
-	unsigned long long int hash = internal_hash(argv[0]);
+	unsigned long long int hash = kgfw_hash(argv[0]);
 	for (unsigned long long int i = 0; i < commands_length; ++i) {
 		if (command_hashes[i] == hash) {
 			if (commands[i] != NULL) {
@@ -64,7 +64,7 @@ int kgfw_console_register_command(char * name, kgfw_console_command_callback com
 	}
 
 	commands[commands_length++] = command;
-	command_hashes[commands_length - 1] = internal_hash(name);
+	command_hashes[commands_length - 1] = kgfw_hash(name);
 	unsigned long long int len = strlen(name);
 	command_names[commands_length - 1] = malloc(len + 1);
 	if (command_names[commands_length - 1] == NULL) {
@@ -78,7 +78,7 @@ int kgfw_console_register_command(char * name, kgfw_console_command_callback com
 }
 
 char * kgfw_console_var(char * name) {
-	unsigned long long int hash = internal_hash(name);
+	unsigned long long int hash = kgfw_hash(name);
 
 	for (unsigned long long int i = 0; i < console_vars_length; ++i) {
 		if (console_var_hashes[i] == hash) {
@@ -119,14 +119,14 @@ int kgfw_console_create_var(char * name, char * value) {
 
 	console_vars[console_vars_length++] = p;
 
-	unsigned long long int hash = internal_hash(name);
+	unsigned long long int hash = kgfw_hash(name);
 	console_var_hashes[console_vars_length - 1] = hash;
 
 	return 0;
 }
 
 int kgfw_console_set_var(char * name, char * value) {
-	unsigned long long int hash = internal_hash(name);
+	unsigned long long int hash = kgfw_hash(name);
 
 	for (unsigned long long int i = 0; i < console_vars_length; ++i) {
 		if (console_var_hashes[i] == hash) {
@@ -395,16 +395,6 @@ static void console_key_callback(kgfw_input_key_enum key, unsigned char action) 
 		kgfw_logc(KGFW_LOG_SEVERITY_CONSOLE, '>');
 		kgfw_logc(KGFW_LOG_SEVERITY_CONSOLE, ' ');
 	}
-}
-
-static unsigned long long int internal_hash(char * string) {
-	unsigned long long int hash = 5381;
-
-	for (unsigned long long int i = 0; string[i] != '\0'; ++i) {
-		hash = (hash << 5) + hash + string[i];
-	}
-
-	return hash;
 }
 
 static int help_command(int argc, char ** argv) {

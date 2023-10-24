@@ -27,7 +27,17 @@ int ktga_load(ktga_t * out_tga, void * buffer, unsigned long long int buffer_len
 	if (out_tga->bitmap == NULL) {
 		return 2;
 	}
-	memcpy(out_tga->bitmap, &buf[18], out_tga->header.img_w * out_tga->header.img_h * (out_tga->header.bpp / 8));
+
+	switch (out_tga->header.img_type) {
+		case 1:;
+			unsigned char * map = &buf[18];
+			for (unsigned long long int i = 0; i < out_tga->header.img_w * out_tga->header.img_h; ++i) {
+				memcpy(&out_tga->bitmap[i * out_tga->header.bpp / 8], &map[buf[18 + out_tga->header.color_map_length]], out_tga->header.color_map_depth / 8);
+			}
+		case 2:
+			memcpy(out_tga->bitmap, &buf[18], out_tga->header.img_w * out_tga->header.img_h * (out_tga->header.bpp / 8));
+			break;
+	}
 
 	return 0;
 }

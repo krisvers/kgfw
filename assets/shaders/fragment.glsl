@@ -19,7 +19,7 @@ uniform sampler2D unif_texture_normal;
 out vec4 out_color;
 
 void main() {
-	vec3 normal = normalize(v_tbn[2]);//normalize(v_tbn * vec3(texture(unif_texture_normal, v_uv)));
+	vec3 normal = normalize(v_tbn * vec3(texture(unif_texture_normal, v_uv)));
 	vec3 light_dir = normalize(unif_light_pos - v_pos);
 	vec3 view_dir = normalize(unif_view_pos - v_pos);
 	float dist = distance(unif_view_pos, v_pos);
@@ -41,6 +41,9 @@ void main() {
 	}
 	
 	vec3 color = (ambient_color * unif_ambience) + (diffuse_color * diffusion) + (specular_color * speculation);
-	//out_color = texture(unif_texture_normal, v_uv) + texture(unif_texture_color, v_uv);
-	out_color = vec4(color, 1);
+	//out_color = vec4(v_color * color, 1);// * texture(unif_texture_color, v_uv);
+	//out_color = vec4(((v_tbn * texture(unif_texture_normal, v_uv).xyz) + 1) / 2, 1);
+	//out_color = vec4((normal + 1) / 2, 1);
+	//out_color = vec4(texture(unif_texture_color, v_uv));
+	out_color = vec4(v_color, 1);
 }

@@ -7,6 +7,7 @@
 typedef struct kgfw_camera {
 	vec3 pos;
 	vec3 rot;
+	vec2 scale;
 
 	float fov;
 	float nplane;
