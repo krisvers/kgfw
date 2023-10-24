@@ -44,6 +44,6 @@ void main() {
 	//out_color = vec4(v_color * color, 1);// * texture(unif_texture_color, v_uv);
 	//out_color = vec4(((v_tbn * texture(unif_texture_normal, v_uv).xyz) + 1) / 2, 1);
 	//out_color = vec4((normal + 1) / 2, 1);
-	//out_color = vec4(texture(unif_texture_color, v_uv));
-	out_color = vec4(v_color, 1);
+	out_color = vec4(texture(unif_texture_color, v_uv));
+	//out_color = vec4(v_color, 1);
 }

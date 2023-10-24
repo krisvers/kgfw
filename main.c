@@ -347,7 +347,7 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 			mesh.vertices[3].g = 1;
 			mesh.vertices[3].b = 1;
 			kgfw_graphics_mesh_node_t * m = kgfw_graphics_mesh_new(&mesh, NULL);
-			/*ktga_t * tga = texture_get("test");
+			ktga_t * tga = texture_get("empty");
 			kgfw_graphics_texture_t tex = {
 				tga->bitmap,
 				tga->header.img_w, tga->header.img_h,
@@ -356,72 +356,73 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 				KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
 				KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
 			};
-			kgfw_graphics_mesh_texture(m, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);*/
+			kgfw_graphics_mesh_texture(m, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 			storage.meshes[storage.meshes_count++] = m;
 		too_many_meshes:;
 		}
 	}
 }
 
+static kgfw_graphics_mesh_node_t * click(void) {
+	mat4x4 m;
+	mat4x4 v;
+	mat4x4 p;
+	mat4x4 s;
+	mat4x4 mvp;
+	mat4x4 sm;
+	vec4 scale = { 1, 1, 0, 1 };
+	vec4 pos = { 0, 0, 0, 1 };
+	for (unsigned long long int i = 0; i < storage.meshes_count; ++i) {
+		float sx, sy;
+		scale[0] = storage.meshes[i]->transform.scale[0];
+		scale[1] = storage.meshes[i]->transform.scale[1];
+		scale[2] = 0;
+		scale[3] = 1;
+		kgfw_input_mouse_pos(&sx, &sy);
+		float x = (sx * 2 / state.window.width) - 1;
+		float y = (-sy * 2 / state.window.height) + 1;
+		pos[0] = 0;
+		pos[1] = 0;
+		pos[2] = 0;
+		pos[3] = 1;
+		mat4x4_identity(m);
+		mat4x4_identity(v);
+		mat4x4_identity(p);
+		kgfw_camera_view(&state.camera, v);
+		kgfw_camera_perspective(&state.camera, p);
+		mat4x4_identity(s);
+		mat4x4_identity(mvp);
+		mat4x4_mul(s, s, p);
+		mat4x4_mul(s, s, v);
+		mat4x4_identity(sm);
+		mat4x4_scale_aniso(sm, sm, storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.scale[1], storage.meshes[i]->transform.scale[2]);
+		memcpy(m, sm, sizeof(mat4x4));
+		mat4x4_translate_in_place(sm, storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.scale[1], 0);
+		mat4x4_mul(s, s, sm);
+		mat4x4_translate_in_place(m, storage.meshes[i]->transform.pos[0], storage.meshes[i]->transform.pos[1], storage.meshes[i]->transform.pos[2]);
+		mat4x4_mul(mvp, mvp, p);
+		mat4x4_mul(mvp, mvp, v);
+		mat4x4_mul(mvp, mvp, m);
+		mat4x4_mul_vec4(pos, mvp, pos);
+		mat4x4_mul_vec4(scale, s, scale);
+		scale[0] = (scale[0] - pos[0]);
+		scale[1] = (scale[1] - pos[1]) * 2;
+
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "checking [%f %f] [%f %f] {%f %f} (%f %f %f, %f %f %f) %p %llu", x, y, scale[0], scale[1], pos[0], pos[1], storage.meshes[i]->transform.pos[0], storage.meshes[i]->transform.pos[1], storage.meshes[i]->transform.pos[2], storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.scale[1], storage.meshes[i]->transform.scale[2], storage.meshes[i], i);
+		if ((x < (pos[0] + scale[0]) && x >(pos[0] - scale[0])) &&
+			(y < (pos[1] + scale[1]) && y >(pos[1] - scale[1]))
+			) {
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "found %p %llu", storage.current, i);
+			return storage.meshes[i];
+		}
+	}
+
+	return NULL;
+}
+
 static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsigned char action) {
 	if (button == KGFW_MOUSE_LBUTTON && action == 1) {
-		mat4x4 m;
-		mat4x4 v;
-		mat4x4 p;
-		mat4x4 s;
-		mat4x4 mvp;
-		mat4x4 sm;
-		vec4 scale = { 1, 1, 0, 1 };
-		vec4 pos = { 0, 0, 0, 1 };
-		for (unsigned long long int i = 0; i < storage.meshes_count; ++i) {
-			/*
-				if(vecPoint.x > tBox.m_vecMin.x && vecPoint.x < tBox.m_vecMax.x &&
-    			vecPoint.y > tBox.m_vecMin.y && vecPoint.y < tBox.m_vecMax.y
-			*/
-			float sx, sy;
-			scale[0] = storage.meshes[i]->transform.scale[0];
-			scale[1] = storage.meshes[i]->transform.scale[1];
-			scale[2] = 0;
-			scale[3] = 1;
-			kgfw_input_mouse_pos(&sx, &sy);
-			float x = (sx * 2 / state.window.width) - 1;
-			float y = (-sy * 2 / state.window.height) + 1;
-			pos[0] = 0;
-			pos[1] = 0;
-			pos[2] = 0;
-			pos[3] = 1;
-			mat4x4_identity(m);
-			mat4x4_identity(v);
-			mat4x4_identity(p);
-			kgfw_camera_view(&state.camera, v);
-			kgfw_camera_perspective(&state.camera, p);
-			mat4x4_identity(s);
-			mat4x4_identity(mvp);
-			mat4x4_mul(s, s, p);
-			mat4x4_mul(s, s, v);
-			mat4x4_identity(sm);
-			mat4x4_scale_aniso(sm, sm, storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.scale[1], storage.meshes[i]->transform.scale[2]);
-			memcpy(m, sm, sizeof(mat4x4));
-			mat4x4_translate_in_place(sm, storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.scale[1], 0);
-			mat4x4_mul(s, s, sm);
-			mat4x4_translate_in_place(m, storage.meshes[i]->transform.pos[0], storage.meshes[i]->transform.pos[1], storage.meshes[i]->transform.pos[2]);
-			mat4x4_mul(mvp, mvp, p);
-			mat4x4_mul(mvp, mvp, v);
-			mat4x4_mul(mvp, mvp, m);
-			mat4x4_mul_vec4(pos, mvp, pos);
-			mat4x4_mul_vec4(scale, s, scale);
-			scale[0] = (scale[0] - pos[0]);
-			scale[1] = (scale[1] - pos[1]) * 2;
-
-			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "checking [%f %f] [%f %f] {%f %f} (%f %f %f, %f %f %f) %p %llu", x, y, scale[0], scale[1], pos[0], pos[1], storage.meshes[i]->transform.pos[0], storage.meshes[i]->transform.pos[1], storage.meshes[i]->transform.pos[2], storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.scale[1], storage.meshes[i]->transform.scale[2], storage.meshes[i], i);
-			if ((x < (pos[0] + scale[0]) && x > (pos[0] - scale[0])) &&
-				(y < (pos[1] + scale[1]) && y > (pos[1] - scale[1]))
-			) {
-				storage.current = storage.meshes[i];
-				kgfw_logf(KGFW_LOG_SEVERITY_INFO, "found %p %llu", storage.current, i);
-				return;
-			}
-		}
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "test %p", click());
 	}
 }
 
