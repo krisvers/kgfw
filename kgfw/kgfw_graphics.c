@@ -39,6 +39,7 @@ typedef struct mesh_node {
 	struct mesh_node * parent;
 	struct mesh_node * child;
 	struct mesh_node * sibling;
+	struct mesh_node * prior_sibling;
 
 	struct {
 		GLuint vao;
@@ -282,6 +283,7 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 			mesh_node_t * n;
 			for (n = state.mesh_root; n->sibling != NULL; n = n->sibling);
 			n->sibling = node;
+			node->prior_sibling = n;
 		}
 		return (kgfw_graphics_mesh_node_t *) node;
 	}
@@ -292,9 +294,29 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 		mesh_node_t * n;
 		for (n = (mesh_node_t *) parent->child; n->sibling != NULL; n = n->sibling);
 		n->sibling = node;
+		node->prior_sibling = n;
 	}
 	
 	return (kgfw_graphics_mesh_node_t *) node;
+}
+
+void kgfw_graphics_mesh_destroy(kgfw_graphics_mesh_node_t * mesh) {
+	if (mesh == NULL) {
+		return;
+	}
+
+	if (mesh->parent != NULL) {
+		mesh->parent->child = mesh->child;
+	}
+	if (mesh->prior_sibling != NULL) {
+		mesh->prior_sibling->sibling = mesh->sibling;
+	}
+
+	if (state.mesh_root == mesh) {
+		state.mesh_root = NULL;
+	}
+
+	meshes_free((mesh_node_t *) mesh);
 }
 
 void kgfw_graphics_set_window(kgfw_window_t * window) {

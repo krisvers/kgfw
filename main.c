@@ -21,12 +21,15 @@ struct {
 	1, 0
 };
 
+#define STORAGE_MAX_MESHES 256
+#define STORAGE_MAX_TEXTURES 16
+
 struct {
-	kgfw_graphics_mesh_node_t * meshes[256];
+	kgfw_graphics_mesh_node_t * meshes[STORAGE_MAX_MESHES];
 	unsigned long long int meshes_count;
-	ktga_t textures[8];
+	ktga_t textures[STORAGE_MAX_TEXTURES];
 	unsigned long long int textures_count;
-	unsigned long long int texture_hashes[8];
+	unsigned long long int texture_hashes[STORAGE_MAX_TEXTURES];
 	kgfw_graphics_mesh_node_t * current;
 } static storage = {
 	{ 0 },
@@ -157,7 +160,7 @@ int main(int argc, char ** argv) {
 			goto skip_tga_load;
 		}
 
-		for (unsigned long long int i = 0; i < files->data.array.length % 8; ++i) {
+		for (unsigned long long int i = 0; i < files->data.array.length % STORAGE_MAX_TEXTURES; ++i) {
 			FILE * fp = fopen(files->data.array.elements.string[i], "rb");
 			if (fp == NULL) {
 				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to open \"%s\"", files->data.array.elements.string[i]);
@@ -347,7 +350,7 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 			mesh.vertices[3].g = 1;
 			mesh.vertices[3].b = 1;
 			kgfw_graphics_mesh_node_t * m = kgfw_graphics_mesh_new(&mesh, NULL);
-			ktga_t * tga = texture_get("empty");
+			ktga_t * tga = texture_get("font");
 			kgfw_graphics_texture_t tex = {
 				tga->bitmap,
 				tga->header.img_w, tga->header.img_h,

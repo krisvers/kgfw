@@ -61,6 +61,7 @@ typedef struct kgfw_graphics_mesh_node {
 	struct kgfw_graphics_mesh_node * parent;
 	struct kgfw_graphics_mesh_node * child;
 	struct kgfw_graphics_mesh_node * sibling;
+	struct kgfw_graphics_mesh_node * prior_sibling;
 
 	struct {
 		unsigned int _a;
@@ -98,6 +99,7 @@ KGFW_PUBLIC kgfw_window_t * kgfw_graphics_get_window(void);
 KGFW_PUBLIC void kgfw_graphics_draw(void);
 KGFW_PUBLIC void kgfw_graphics_viewport(unsigned int width, unsigned int height);
 KGFW_PUBLIC kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, kgfw_graphics_mesh_node_t * parent);
+KGFW_PUBLIC void kgfw_graphics_mesh_destroy(kgfw_graphics_mesh_node_t * mesh);
 KGFW_PUBLIC void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture, kgfw_graphics_texture_use_enum use);
 KGFW_PUBLIC void kgfw_graphics_deinit(void);
 KGFW_PUBLIC void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsigned int settings);
