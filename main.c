@@ -31,6 +31,7 @@ struct {
 	unsigned long long int textures_count;
 	unsigned long long int texture_hashes[STORAGE_MAX_TEXTURES];
 	kgfw_graphics_mesh_node_t * current;
+	kgfw_graphics_mesh_node_t * select_mesh;
 } static storage = {
 	{ 0 },
 	0,
@@ -243,6 +244,21 @@ int main(int argc, char ** argv) {
 
 	mov->init(mov, &mov_state);
 
+	storage.select_mesh = kgfw_graphics_mesh_new(&mesh, NULL);
+	{
+		storage.select_mesh->transform.scale[0] = 0;
+		ktga_t * tga = texture_get("selected");
+		kgfw_graphics_texture_t tex = {
+			tga->bitmap,
+			tga->header.img_w, tga->header.img_h,
+			KGFW_GRAPHICS_TEXTURE_FORMAT_BGRA,
+			KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
+			KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
+			KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
+		};
+		kgfw_graphics_mesh_texture(storage.select_mesh, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+	}
+
 	//kgfw_graphics_mesh_node_t * current = NULL;
 	while (!state.window.closed && !state.exit) {
 		kgfw_time_start();
@@ -381,6 +397,9 @@ static kgfw_graphics_mesh_node_t * click(void) {
 	vec4 scale = { 1, 1, 0, 1 };
 	vec4 pos = { 0, 0, 0, 1 };
 	for (unsigned long long int i = 0; i < storage.meshes_count; ++i) {
+		if (storage.meshes[i] == NULL) {
+			continue;
+		}
 		float sx, sy;
 		scale[0] = storage.meshes[i]->transform.scale[0];
 		scale[1] = storage.meshes[i]->transform.scale[1];
@@ -418,8 +437,7 @@ static kgfw_graphics_mesh_node_t * click(void) {
 
 		//kgfw_logf(KGFW_LOG_SEVERITY_INFO, "checking [%f %f] [%f %f] {%f %f} (%f %f %f, %f %f %f) %p %llu", x, y, scale[0], scale[1], pos[0], pos[1], storage.meshes[i]->transform.pos[0], storage.meshes[i]->transform.pos[1], storage.meshes[i]->transform.pos[2], storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.scale[1], storage.meshes[i]->transform.scale[2], storage.meshes[i], i);
 		if ((x < (pos[0] + scale[0]) && x >(pos[0] - scale[0])) &&
-			(y < (pos[1] + scale[1]) && y >(pos[1] - scale[1]))
-			) {
+			(y < (pos[1] + scale[1]) && y >(pos[1] - scale[1]))) {
 			//kgfw_logf(KGFW_LOG_SEVERITY_INFO, "found %p %llu", storage.current, i);
 			return storage.meshes[i];
 		}
@@ -431,7 +449,15 @@ static kgfw_graphics_mesh_node_t * click(void) {
 static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsigned char action) {
 	if (button == KGFW_MOUSE_LBUTTON && action == 1) {
 		storage.current = click();
-		kgfw_graphics_mesh_texture_detach(storage.current, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+		if (storage.current != NULL) {
+			storage.select_mesh->transform.scale[0] = 1;
+			storage.select_mesh->transform.pos[0] = storage.current->transform.pos[0];
+			storage.select_mesh->transform.pos[1] = storage.current->transform.pos[1];
+			storage.select_mesh->transform.pos[2] = storage.current->transform.pos[2];
+			//kgfw_graphics_mesh_texture_detach(storage.current, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+		} else {
+			storage.select_mesh->transform.scale[0] = 0;
+		}
 	}
 }
 
