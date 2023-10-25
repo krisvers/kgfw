@@ -176,6 +176,8 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	GL_CALL(glEnable(GL_DEPTH_TEST));
 	//GL_CALL(glEnable(GL_FRAMEBUFFER_SRGB));
 	//GL_CALL(glPolygonMode(GL_FRONT_AND_BACK, GL_LINE));
+	GL_CALL(glEnable(GL_BLEND));
+	GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 
 	update_settings(state.settings);
 
@@ -184,7 +186,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 void kgfw_graphics_draw(void) {
 	GL_CALL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
-	GL_CALL(glClearColor(0.15f, 0.1f, 0.175f, 1.0f));
+	GL_CALL(glClearColor(0.57f, 0.59f, 0.58f, 1.0f));
 
 	mat4x4 mvp;
 	mat4x4 m;
@@ -247,6 +249,21 @@ void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_
 	GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filtering_mipmap));
 	GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture->width, texture->height, 0, GL_BGRA, GL_UNSIGNED_BYTE, texture->bitmap));
 	GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
+}
+
+void kgfw_graphics_mesh_texture_detach(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_use_enum use) {
+	mesh_node_t * m = (mesh_node_t *) mesh;
+	GLuint * t = NULL;
+	if (use == KGFW_GRAPHICS_TEXTURE_USE_COLOR) {
+		t = &m->gl.tex;
+	} else if (use == KGFW_GRAPHICS_TEXTURE_USE_NORMAL) {
+		t = &m->gl.normal;
+	}
+
+	if (*t != 0) {
+		GL_CALL(glDeleteTextures(1, t));
+		*t = 0;
+	}
 }
 
 kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, kgfw_graphics_mesh_node_t * parent) {
@@ -312,7 +329,7 @@ void kgfw_graphics_mesh_destroy(kgfw_graphics_mesh_node_t * mesh) {
 		mesh->prior_sibling->sibling = mesh->sibling;
 	}
 
-	if (state.mesh_root == mesh) {
+	if (state.mesh_root == (mesh_node_t *) mesh) {
 		state.mesh_root = NULL;
 	}
 

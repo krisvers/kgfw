@@ -350,7 +350,7 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 			mesh.vertices[3].g = 1;
 			mesh.vertices[3].b = 1;
 			kgfw_graphics_mesh_node_t * m = kgfw_graphics_mesh_new(&mesh, NULL);
-			ktga_t * tga = texture_get("font");
+			ktga_t * tga = texture_get("empty");
 			kgfw_graphics_texture_t tex = {
 				tga->bitmap,
 				tga->header.img_w, tga->header.img_h,
@@ -362,6 +362,11 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 			kgfw_graphics_mesh_texture(m, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 			storage.meshes[storage.meshes_count++] = m;
 		too_many_meshes:;
+		}
+		if (key == KGFW_KEY_BACKSPACE) {
+			if (storage.current != NULL) {
+				kgfw_graphics_mesh_destroy(storage.current);
+			}
 		}
 	}
 }
@@ -411,11 +416,11 @@ static kgfw_graphics_mesh_node_t * click(void) {
 		scale[0] = (scale[0] - pos[0]);
 		scale[1] = (scale[1] - pos[1]) * 2;
 
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "checking [%f %f] [%f %f] {%f %f} (%f %f %f, %f %f %f) %p %llu", x, y, scale[0], scale[1], pos[0], pos[1], storage.meshes[i]->transform.pos[0], storage.meshes[i]->transform.pos[1], storage.meshes[i]->transform.pos[2], storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.scale[1], storage.meshes[i]->transform.scale[2], storage.meshes[i], i);
+		//kgfw_logf(KGFW_LOG_SEVERITY_INFO, "checking [%f %f] [%f %f] {%f %f} (%f %f %f, %f %f %f) %p %llu", x, y, scale[0], scale[1], pos[0], pos[1], storage.meshes[i]->transform.pos[0], storage.meshes[i]->transform.pos[1], storage.meshes[i]->transform.pos[2], storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.scale[1], storage.meshes[i]->transform.scale[2], storage.meshes[i], i);
 		if ((x < (pos[0] + scale[0]) && x >(pos[0] - scale[0])) &&
 			(y < (pos[1] + scale[1]) && y >(pos[1] - scale[1]))
 			) {
-			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "found %p %llu", storage.current, i);
+			//kgfw_logf(KGFW_LOG_SEVERITY_INFO, "found %p %llu", storage.current, i);
 			return storage.meshes[i];
 		}
 	}
@@ -425,7 +430,8 @@ static kgfw_graphics_mesh_node_t * click(void) {
 
 static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsigned char action) {
 	if (button == KGFW_MOUSE_LBUTTON && action == 1) {
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "test %p", click());
+		storage.current = click();
+		kgfw_graphics_mesh_texture_detach(storage.current, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 	}
 }
 
@@ -442,12 +448,12 @@ static int player_ortho_movement_update(player_movement_t * self, player_movemen
 	} else if (kgfw_input_key(KGFW_KEY_LSHIFT)) {
 		float x, y;
 		kgfw_input_mouse_scroll(&x, &y);
-		state.camera.pos[0] += y * state.camera.scale[0];
+		state.camera.pos[0] += y * state.camera.scale[0] / 5;
 	} else {
 		float x, y;
 		kgfw_input_mouse_scroll(&x, &y);
-		state.camera.pos[0] -= x * state.camera.scale[0];
-		state.camera.pos[1] += y * state.camera.scale[1];
+		state.camera.pos[0] -= x * state.camera.scale[0] / 5;
+		state.camera.pos[1] += y * state.camera.scale[1] / 5;
 	}
 
 	if (kgfw_input_key(KGFW_KEY_LEFT)) {
@@ -463,10 +469,10 @@ static int player_ortho_movement_update(player_movement_t * self, player_movemen
 		state.camera.pos[1] += state.camera.scale[1] / 5;
 	}
 
-	if (kgfw_input_key(KGFW_KEY_LBRACKET)) {
+	if (kgfw_input_key(KGFW_KEY_RBRACKET)) {
 		state.camera.scale[0] /= 1.05f;
 		state.camera.scale[1] /= 1.05f;
-	} else if (kgfw_input_key(KGFW_KEY_RBRACKET)) {
+	} else if (kgfw_input_key(KGFW_KEY_LBRACKET)) {
 		state.camera.scale[0] *= 1.05f;
 		state.camera.scale[1] *= 1.05f;
 	}
