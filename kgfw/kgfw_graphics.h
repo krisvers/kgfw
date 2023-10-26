@@ -4,6 +4,7 @@
 #include "kgfw_defines.h"
 #include "kgfw_window.h"
 #include "kgfw_camera.h"
+#include "../lib/include/linmath.h"
 
 typedef struct kgfw_graphics_vertex {
 	float x, y, z;
@@ -57,6 +58,12 @@ typedef struct kgfw_graphics_mesh_node {
 		float scale[3];
 		unsigned char absolute;
 	} transform;
+
+	struct {
+		mat4x4 translation;
+		mat4x4 rotation;
+		mat4x4 scale;
+	} matrices;
 
 	struct kgfw_graphics_mesh_node * parent;
 	struct kgfw_graphics_mesh_node * child;

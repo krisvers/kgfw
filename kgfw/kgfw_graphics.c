@@ -36,6 +36,12 @@ typedef struct mesh_node {
 		unsigned char absolute;
 	} transform;
 
+	struct {
+		mat4x4 translation;
+		mat4x4 rotation;
+		mat4x4 scale;
+	} matrices;
+
 	struct mesh_node * parent;
 	struct mesh_node * child;
 	struct mesh_node * sibling;
@@ -328,6 +334,12 @@ void kgfw_graphics_mesh_destroy(kgfw_graphics_mesh_node_t * mesh) {
 	if (mesh->prior_sibling != NULL) {
 		mesh->prior_sibling->sibling = mesh->sibling;
 	}
+	if (mesh->child != NULL) {
+		mesh->child->parent = mesh->parent;
+	}
+	if (mesh->sibling != NULL) {
+		mesh->sibling->prior_sibling = mesh->prior_sibling;
+	}
 
 	if (state.mesh_root == (mesh_node_t *) mesh) {
 		state.mesh_root = NULL;
@@ -418,8 +430,8 @@ static mesh_node_t * meshes_new(void) {
 
 static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
 	if (mesh->transform.absolute) {
-		mat4x4_identity(out_m);
-		mat4x4_translate(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[0] + mesh->transform.pos[2]);
+		mat4x4_identity(mesh->matrices.translation);
+		mat4x4_translate(mesh->matrices.translation, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[0] + mesh->transform.pos[2]);
 		recurse_state.pos[0] = mesh->transform.pos[0];
 		recurse_state.pos[1] = mesh->transform.pos[1];
 		recurse_state.pos[2] = mesh->transform.pos[2];
@@ -430,7 +442,7 @@ static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
 		recurse_state.scale[1] = mesh->transform.scale[1];
 		recurse_state.scale[2] = mesh->transform.scale[2];
 	} else {
-		mat4x4_translate_in_place(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[2] + mesh->transform.pos[2]);
+		mat4x4_translate_in_place(mesh->matrices.translation, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[2] + mesh->transform.pos[2]);
 		recurse_state.pos[0] += mesh->transform.pos[0];
 		recurse_state.pos[1] += mesh->transform.pos[1];
 		recurse_state.pos[2] += mesh->transform.pos[2];
@@ -441,14 +453,14 @@ static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
 		recurse_state.scale[1] *= mesh->transform.scale[1];
 		recurse_state.scale[2] *= mesh->transform.scale[2];
 	}
-	mat4x4_identity(recurse_state.model_r);
-	mat4x4_rotate_X(out_m, out_m, (recurse_state.rot[0]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Y(out_m, out_m, (recurse_state.rot[1]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Z(out_m, out_m, (recurse_state.rot[2]) * 3.141592f / 180.0f);
-	mat4x4_rotate_X(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[0]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Y(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[1]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Z(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[2]) * 3.141592f / 180.0f);
-	mat4x4_scale_aniso(out_m, out_m, recurse_state.scale[0], recurse_state.scale[1], recurse_state.scale[2]);
+	mat4x4_rotate_X(mesh->matrices.rotation, mesh->matrices.rotation, (recurse_state.rot[0]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Y(mesh->matrices.rotation, mesh->matrices.rotation, (recurse_state.rot[1]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Z(mesh->matrices.rotation, mesh->matrices.rotation, (recurse_state.rot[2]) * 3.141592f / 180.0f);
+	mat4x4_identity(mesh->matrices.scale);
+	mat4x4_scale_aniso(mesh->matrices.scale, mesh->matrices.scale, recurse_state.scale[0], recurse_state.scale[1], recurse_state.scale[2]);
+	memcpy(recurse_state.model_r, mesh->matrices.rotation, sizeof(mat4x4));
+	mat4x4_add(out_m, mesh->matrices.scale, mesh->matrices.rotation);
+	mat4x4_add(out_m, out_m, mesh->matrices.scale);
 }
 
 static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
