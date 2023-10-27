@@ -3,5 +3,5 @@ as files = "assets/audio/jeff.wav", "assets/audio/cantina.wav";
 as names = "jeff", "cantina";
 
 [textures]
-as files = "assets/textures/font.tga", "assets/textures/hitbox.tga", "assets/textures/and.tga", "assets/textures/xor.tga", "assets/textures/or.tga", "assets/textures/not.tga", "assets/textures/empty.tga", "assets/textures/wire_on.tga", "assets/textures/wire_off.tga";
-as names = "font", "selected", "and", "xor", "or", "not", "empty", "wire_on", "wire_off";
+as files = "assets/textures/font.tga", "assets/textures/and.tga", "assets/textures/xor.tga", "assets/textures/or.tga", "assets/textures/not.tga", "assets/textures/wire_on.tga", "assets/textures/wire_off.tga";
+as names = "font", "and", "xor", "or", "not", "wire_on", "wire_off";

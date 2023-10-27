@@ -17,27 +17,57 @@ struct {
 	unsigned char exit;
 } static state = {
 	{ 0 },
-	{ { 0, 0, 1 }, { 0, 0, 0 }, { 1, 1 }, 90, 0.01f, 1000.0f, 1.3333f, 1 },
+	{ { 0, 0, 0 }, { 0, 0, 0 }, { 1, 1 }, 90, 0.0f, 1000.0f, 1.3333f, 1 },
 	1, 0
 };
 
-#define STORAGE_MAX_MESHES 256
+typedef struct gate_t {
+	enum {
+		GATE_AND = 0,
+		GATE_OR,
+		GATE_XOR,
+		GATE_NOT,
+	} type;
+
+	struct gate_t * parent;
+	struct gate_t * left;
+	struct gate_t * right;
+	kgfw_graphics_mesh_node_t * mesh;
+} gate_t;
+
+typedef struct output_t {
+	gate_t * gate;
+} output_t;
+
+typedef struct input_t {
+	unsigned char value;
+} input_t;
+
+typedef struct circuit_t {
+	input_t * inputs;
+	unsigned long long int inputs_count;
+	output_t * outputs;
+	unsigned long long int outputs_count;
+	char * name;
+} circuit_t;
+
+#define STORAGE_MAX_GATES 256
 #define STORAGE_MAX_TEXTURES 16
 
 struct {
-	kgfw_graphics_mesh_node_t * meshes[STORAGE_MAX_MESHES];
-	unsigned long long int meshes_count;
+	gate_t gates[STORAGE_MAX_GATES];
+	unsigned long long int gates_count;
 	ktga_t textures[STORAGE_MAX_TEXTURES];
 	unsigned long long int textures_count;
 	unsigned long long int texture_hashes[STORAGE_MAX_TEXTURES];
-	kgfw_graphics_mesh_node_t ** current;
-	kgfw_graphics_mesh_node_t * select_mesh;
+	gate_t * current;
 } static storage = {
 	{ 0 },
 	0,
 	{ 0 },
 	0,
 	{ 0 },
+	NULL
 };
 
 kgfw_graphics_vertex_t mesh_vertices[4] = {
@@ -68,7 +98,6 @@ static int kgfw_logc_handler(kgfw_log_severity_enum severity, char character);
 static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action);
 static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsigned char action);
 static ktga_t * texture_get(char * name);
-static kgfw_graphics_mesh_node_t ** click(void);
 
 typedef struct player_movement {
 	KGFW_DEFAULT_COMPONENT_MEMBERS
@@ -83,6 +112,7 @@ static int player_movement_init(player_movement_t * self, player_movement_state_
 static int player_ortho_movement_update(player_movement_t * self, player_movement_state_t * mstate);
 static int player_movement_update(player_movement_t * self, player_movement_state_t * mstate);
 static int exit_command(int argc, char ** argv);
+static gate_t * click(void);
 
 int main(int argc, char ** argv) {
 	kgfw_log_register_callback(kgfw_log_handler);
@@ -245,24 +275,8 @@ int main(int argc, char ** argv) {
 
 	mov->init(mov, &mov_state);
 
-	storage.select_mesh = kgfw_graphics_mesh_new(&mesh, NULL);
-	{
-		storage.select_mesh->transform.scale[0] = 0;
-		ktga_t * tga = texture_get("selected");
-		kgfw_graphics_texture_t tex = {
-			tga->bitmap,
-			tga->header.img_w, tga->header.img_h,
-			KGFW_GRAPHICS_TEXTURE_FORMAT_BGRA,
-			KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
-			KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
-			KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
-		};
-		kgfw_graphics_mesh_texture(storage.select_mesh, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
-	}
-
 	//kgfw_graphics_mesh_node_t * current = NULL;
 	while (!state.window.closed && !state.exit) {
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "%p", click());
 		kgfw_time_start();
 		kgfw_graphics_draw();
 
@@ -344,20 +358,36 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 			state.exit = 1;
 			return;
 		}
+		if (kgfw_input_key(KGFW_KEY_BACKSLASH)) {
+			state.camera.rot[0] = 0;
+			state.camera.rot[1] = 0;
+			state.camera.rot[2] = 0;
+		}
 		if (kgfw_input_key_down(KGFW_KEY_R)) {
 			char * argv[3] = { "gfx", "reload", "shaders" };
 			kgfw_console_run(3, argv);
 		}
 		if (kgfw_input_key_down(KGFW_KEY_N)) {
-			if (storage.meshes_count > 255) {
-				goto too_many_meshes;
+			if (storage.gates_count > 255) {
+				goto too_many_gates;
 			}
-
-			mesh.pos[0] = state.camera.pos[0];
-			mesh.pos[1] = state.camera.pos[1];
-			mesh.pos[2] = state.camera.pos[2];
+			mesh.pos[0] = fmod(state.camera.pos[0], 1 / 16.0f);
+			mesh.pos[1] = fmod(state.camera.pos[1], 1 / 16.0f);
+			mesh.pos[2] = fmod(state.camera.pos[2], 1 / 16.0f);
+			mesh.vertices[0].r = 1;
+			mesh.vertices[0].g = 1;
+			mesh.vertices[0].b = 1;
+			mesh.vertices[1].r = 1;
+			mesh.vertices[1].g = 1;
+			mesh.vertices[1].b = 1;
+			mesh.vertices[2].r = 1;
+			mesh.vertices[2].g = 1;
+			mesh.vertices[2].b = 1;
+			mesh.vertices[3].r = 1;
+			mesh.vertices[3].g = 1;
+			mesh.vertices[3].b = 1;
 			kgfw_graphics_mesh_node_t * m = kgfw_graphics_mesh_new(&mesh, NULL);
-			ktga_t * tga = texture_get("empty");
+			ktga_t * tga = texture_get("and");
 			kgfw_graphics_texture_t tex = {
 				tga->bitmap,
 				tga->header.img_w, tga->header.img_h,
@@ -367,31 +397,80 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 				KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
 			};
 			kgfw_graphics_mesh_texture(m, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
-			storage.meshes[storage.meshes_count++] = m;
-		too_many_meshes:;
+			storage.gates[storage.gates_count++].mesh = m;
+		too_many_gates:;
 		}
 		if (key == KGFW_KEY_BACKSPACE) {
-			if (storage.current != NULL && *storage.current) {
-				kgfw_graphics_mesh_destroy(*storage.current);
-				*storage.current = NULL;
-				storage.current = NULL;
-				storage.select_mesh->transform.scale[0] = 0;
+			if (storage.current != NULL && storage.current->mesh != NULL) {
+				/*kgfw_graphics_mesh_destroy(storage.current->mesh);
+				storage.current->mesh = NULL;
+				storage.current = NULL;*/
 			}
 		}
 	}
 }
 
+static gate_t * click(void) {
+	float sx, sy;
+	kgfw_input_mouse_pos(&sx, &sy);
+	vec4 mouse = { (sx * 2 / state.window.width) - 1, (-sy * 2 / state.window.height) + 1, state.camera.pos[2], 1};
+
+	mat4x4 vp;
+	mat4x4 ivp;
+	mat4x4 v;
+	{
+		kgfw_camera_perspective(&state.camera, vp);
+		kgfw_camera_view(&state.camera, v);
+		mat4x4_mul(vp, vp, v);
+		mat4x4_invert(ivp, vp);
+	}
+
+	vec4 pos = { 0, 0, 0, 1 };
+	mat4x4_mul_vec4(pos, ivp, mouse);
+
+	vec4 dir = { vp[2][0], vp[2][1], vp[2][2], 0 };
+
+	//kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "mouse %f %f screen %f %f world %f %f %f", sx, sy, mouse[0], mouse[1], pos[0], pos[1], pos[2]);
+
+	for (unsigned long long int i = 0; i < storage.gates_count; ++i) {
+		if (storage.gates[i].mesh == NULL) {
+			continue;
+		}
+
+		mat4x4 m;
+		mat4x4_mul(m, storage.gates[i].mesh->matrices.scale, storage.gates[i].mesh->matrices.rotation);
+		mat4x4_mul(m, m, storage.gates[i].mesh->matrices.translation);
+
+		vec3 max = { storage.gates[i].mesh->transform.pos[0] + storage.gates[i].mesh->transform.scale[0], storage.gates[i].mesh->transform.pos[1] + storage.gates[i].mesh->transform.scale[1], storage.gates[i].mesh->transform.pos[2] + storage.gates[i].mesh->transform.scale[2] };
+		vec3 min = { storage.gates[i].mesh->transform.pos[0] - storage.gates[i].mesh->transform.scale[0], storage.gates[i].mesh->transform.pos[1] - storage.gates[i].mesh->transform.scale[1], storage.gates[i].mesh->transform.pos[2] - storage.gates[i].mesh->transform.scale[2] };
+
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos %f %f %f %f dir %f %f %f %f", pos[0], pos[1], pos[2], pos[3], dir[0], dir[1], dir[2], dir[3]);
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "max %f %f %f min %f %f %f", max[0], max[1], max[2], min[0], min[1], min[2]);
+		if ((pos[0] > min[0])) {
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos[0] > min[0]");
+			if ((pos[0] < max[0])) {
+				kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos[0] < max[0]");
+				if ((pos[1] > min[1])) {
+					kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos[1] > min[1]");
+					if ((pos[1] < max[1])) {
+						kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "hit");
+						return &storage.gates[i];
+					}
+				}
+			}
+		}
+	}
+
+	return NULL;
+}
+
 static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsigned char action) {
 	if (button == KGFW_MOUSE_LBUTTON && action == 1) {
 		storage.current = click();
-		if (storage.current != NULL && *storage.current != NULL) {
-			storage.select_mesh->transform.scale[0] = 1;
-			storage.select_mesh->transform.pos[0] = (*storage.current)->transform.pos[0];
-			storage.select_mesh->transform.pos[1] = (*storage.current)->transform.pos[1];
-			storage.select_mesh->transform.pos[2] = (*storage.current)->transform.pos[2];
-			//kgfw_graphics_mesh_texture_detach(*storage.current, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+		if (storage.current != NULL && storage.current->mesh != NULL) {
+			//kgfw_graphics_mesh_texture_detach(storage.current, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 		} else {
-			storage.select_mesh->transform.scale[0] = 0;
+			
 		}
 	}
 }
@@ -402,10 +481,17 @@ static int player_movement_init(player_movement_t * self, player_movement_state_
 
 static int player_ortho_movement_update(player_movement_t * self, player_movement_state_t * mstate) {
 	if (kgfw_input_mouse_button(KGFW_MOUSE_LBUTTON)) {
-		float x, y;
-		kgfw_input_mouse_delta(&x, &y);
-		state.camera.pos[0] += x / 30 * state.camera.scale[0];
-		state.camera.pos[1] -= y / 30 * state.camera.scale[1];
+		if (storage.current == NULL || storage.current->mesh == NULL) {
+			float x, y;
+			kgfw_input_mouse_delta(&x, &y);
+			state.camera.pos[0] += x / 30 * state.camera.scale[0];
+			state.camera.pos[1] -= y / 30 * state.camera.scale[1];
+		} else {
+			float x, y;
+			kgfw_input_mouse_delta(&x, &y);
+			(*storage.current).mesh->transform.pos[0] -= x / 30 * state.camera.scale[0]; (*storage.current).mesh->transform.pos[0] = round((*storage.current).mesh->transform.pos[0] / (1 / 16.0f)) * (1 / 16.0f);
+			(*storage.current).mesh->transform.pos[1] += y / 30 * state.camera.scale[1]; (*storage.current).mesh->transform.pos[1] = round((*storage.current).mesh->transform.pos[1] / (1 / 16.0f)) * (1 / 16.0f);
+		}
 	} else if (kgfw_input_key(KGFW_KEY_LSHIFT)) {
 		float x, y;
 		kgfw_input_mouse_scroll(&x, &y);
@@ -520,63 +606,6 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 	}
 
 	return 0;
-}
-
-static kgfw_graphics_mesh_node_t ** click(void) {
-	float sx, sy;
-	kgfw_input_mouse_pos(&sx, &sy);
-	vec4 mouse = { (sx * 2 / state.window.width) - 1, (-sy * 2 / state.window.height) + 1, state.camera.pos[2], 1};
-
-	mat4x4 vp;
-	mat4x4 ivp;
-	mat4x4 v;
-	{
-		kgfw_camera_perspective(&state.camera, vp);
-		kgfw_camera_view(&state.camera, v);
-		mat4x4_mul(vp, vp, v);
-		mat4x4_invert(ivp, vp);
-	}
-
-	vec4 pos = { 0, 0, 0, 1 };
-	mat4x4_mul_vec4(pos, ivp, mouse);
-	pos[0] *= pos[3];
-	pos[1] *= pos[3];
-	pos[2] *= pos[3];
-
-	vec4 dir = { vp[2][0], vp[2][1], vp[2][2], 0 };
-
-	kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "mouse %f %f screen %f %f world %f %f %f", sx, sy, mouse[0], mouse[1], pos[0], pos[1], pos[2]);
-
-	for (unsigned long long int i = 0; i < storage.meshes_count; ++i) {
-		if (storage.meshes[i] == NULL) {
-			continue;
-		}
-
-		mat4x4 m;
-		mat4x4_mul(m, storage.meshes[i]->matrices.scale, storage.meshes[i]->matrices.rotation);
-		mat4x4_mul(m, m, storage.meshes[i]->matrices.translation);
-
-		vec3 max = { storage.meshes[i]->transform.pos[0] + storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.pos[1] + storage.meshes[i]->transform.scale[1], storage.meshes[i]->transform.pos[2] + storage.meshes[i]->transform.scale[2] };
-		vec3 min = { storage.meshes[i]->transform.pos[0] - storage.meshes[i]->transform.scale[0], storage.meshes[i]->transform.pos[1] - storage.meshes[i]->transform.scale[1], storage.meshes[i]->transform.pos[2] - storage.meshes[i]->transform.scale[2] };
-
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos %f %f %f %f dir %f %f %f %f", pos[0], pos[1], pos[2], pos[3], dir[0], dir[1], dir[2], dir[3]);
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "max %f %f %f min %f %f %f", max[0], max[1], max[2], min[0], min[1], min[2]);
-		if ((pos[0] > min[0])) {
-			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos[0] > min[0]");
-			if ((pos[0] < max[0])) {
-				kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos[0] < max[0]");
-				if ((pos[1] > min[1])) {
-					kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos[1] > min[1]");
-					if ((pos[1] < max[1])) {
-						kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "hit");
-						return &storage.meshes[i];
-					}
-				}
-			}
-		}
-	}
-
-	return NULL;
 }
 
 static int exit_command(int argc, char ** argv) {
