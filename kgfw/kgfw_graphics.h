@@ -109,6 +109,7 @@ KGFW_PUBLIC kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mes
 KGFW_PUBLIC void kgfw_graphics_mesh_destroy(kgfw_graphics_mesh_node_t * mesh);
 KGFW_PUBLIC void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture, kgfw_graphics_texture_use_enum use);
 KGFW_PUBLIC void kgfw_graphics_mesh_texture_detach(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_use_enum use);
+KGFW_PUBLIC void kgfw_graphics_debug_line(vec3 p0, vec3 p1);
 KGFW_PUBLIC void kgfw_graphics_deinit(void);
 KGFW_PUBLIC void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsigned int settings);
 KGFW_PUBLIC unsigned int kgfw_graphics_settings_get(void);

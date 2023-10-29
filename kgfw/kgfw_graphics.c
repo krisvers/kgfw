@@ -349,6 +349,15 @@ void kgfw_graphics_mesh_destroy(kgfw_graphics_mesh_node_t * mesh) {
 	meshes_free((mesh_node_t *) mesh);
 }
 
+void kgfw_graphics_debug_line(vec3 p0, vec3 p1) {
+	GLuint vao;
+	GLuint vbo;
+
+	GL_CALL(glGenVertexArrays(1, &vao));
+	GL_CALL(glGenBuffers(1, &vbo));
+	GL_CALL(glBindVertexArray(vao));
+}
+
 void kgfw_graphics_set_window(kgfw_window_t * window) {
 	state.window = window;
 	if (window != NULL) {

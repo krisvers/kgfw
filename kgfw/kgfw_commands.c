@@ -25,27 +25,23 @@ static int sound_command(int argc, char ** argv) {
 		float y = 0;
 		float z = 0;
 		unsigned char relative = 1;
-		switch (argc) {
-			case 4:
-				gain = strtod(argv[3], NULL);
-				break;
-			case 5:
-				pitch = strtod(argv[4], NULL);
-				break;
-			case 6:
-				x = strtod(argv[5], NULL);
-				break;
-			case 7:
-				y = strtod(argv[6], NULL);
-				break;
-			case 8:
-				z = strtod(argv[7], NULL);
-				break;
-			default:
-				if (argc >= 9) {
-					relative = (argv[8][0] == '1');
-				}
-				break;
+		if (argc >= 4) {
+			gain = strtod(argv[3], NULL);
+		}
+		if (argc >= 5) {
+			pitch = strtod(argv[4], NULL);
+		}
+		if (argc >= 6) {
+			x = strtod(argv[5], NULL);
+		}
+		if (argc >= 7) {
+			y = strtod(argv[6], NULL);
+		}
+		if (argc >= 8) {
+			z = strtod(argv[7], NULL);
+		}
+		if (argc >= 9) {
+			relative = (argv[8][0] == '1');
 		}
 
 		if (kgfw_audio_play_sound(argv[2], x, y, z, gain, pitch, 0, relative) != 0) {

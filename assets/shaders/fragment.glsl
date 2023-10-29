@@ -38,12 +38,15 @@ void main() {
 		tex_color = vec4(1, 1, 1, 1);
 	} else {
 		tex_color = texture(unif_texture_color, v_uv);
+		if (tex_color.a < 0.5) {
+			discard;
+		}
 	}
 	
 	vec3 color = (ambient_color * unif_ambience) + (diffuse_color * diffusion) + (specular_color * speculation);
 	//out_color = vec4(v_color * color, 1);// * texture(unif_texture_color, v_uv);
 	//out_color = vec4(((v_tbn * texture(unif_texture_normal, v_uv).xyz) + 1) / 2, 1);
 	//out_color = vec4((normal + 1) / 2, 1);
-	out_color = vec4(texture(unif_texture_color, v_uv));
-	//out_color = vec4(v_color, 1);
+	out_color = vec4(tex_color * vec4(v_color, 1));
+	//out_color = vec4(1, 0, 1, 1);
 }
