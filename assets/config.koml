@@ -1,7 +1,7 @@
 [audio]
-as files = "assets/audio/jeff.wav", "assets/audio/cantina.wav", "assets/audio/blue_jeff.wav";
-as names = "jeff", "cantina", "blue_jeff";
+as files = "assets/audio/click.wav";
+as names = "click";
 
 [textures]
-as files = "assets/textures/relay_on.tga", "assets/textures/relay_off.tga", "assets/textures/put_on.tga", "assets/textures/put_off.tga", "assets/textures/font.tga", "assets/textures/empty.tga", "assets/textures/and.tga", "assets/textures/xor.tga", "assets/textures/or.tga", "assets/textures/not.tga", "assets/textures/wire_on.tga", "assets/textures/wire_off.tga";
-as names = "relay_on", "relay_off", "put_on", "put_off", "font", "empty", "and", "xor", "or", "not", "wire_on", "wire_off";
+as files = "assets/textures/relay_on.tga", "assets/textures/relay_off.tga", "assets/textures/put_on.tga", "assets/textures/put_off.tga", "assets/textures/font.tga", "assets/textures/empty.tga", "assets/textures/and.tga", "assets/textures/xor.tga", "assets/textures/or.tga", "assets/textures/not.tga", "assets/textures/wire_on.tga", "assets/textures/wire_off.tga", "assets/textures/selected.tga";
+as names = "relay_on", "relay_off", "put_on", "put_off", "font", "empty", "and", "xor", "or", "not", "wire_on", "wire_off", "selected";
