@@ -7,12 +7,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <linmath.h>
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
+
+#if (KGFW_D3D == 11)
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
+
+#if (KGFW_OPENGL == 33)
+
+#include <glad/glad.h>
 #ifdef KGFW_APPLE
 #include <OpenGL/gl.h>
 #else
 #include <GL/gl.h>
+#endif
+
 #endif
 
 #define KGFW_GRAPHICS_DEFAULT_VERTICES_COUNT 0
@@ -20,12 +30,14 @@
 #define KGFW_GRAPHICS_DEFAULT_SHADOW_MAP_WIDTH 2048
 #define KGFW_GRAPHICS_DEFAULT_SHADOW_MAP_HEIGHT 2048
 
+#if (KGFW_OPENGL == 33)
 #ifdef KGFW_DEBUG
 #define GL_CHECK_ERROR() { GLenum err = glGetError(); if (err != GL_NO_ERROR) { kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "(%s:%u) OpenGL Error (%u 0x%X) %s", __FILE__, __LINE__, err, err, (err == 0x500) ? "INVALID ENUM" : (err == 0x501) ? "INVALID VALUE" : (err == 0x502) ? "INVALID OPERATION" : (err == 0x503) ? "STACK OVERFLOW" : (err == 0x504) ? "STACK UNDERFLOW" : (err == 0x505) ? "OUT OF MEMORY" : (err == 0x506) ? "INVALID FRAMEBUFFER OPERATION" : "UNKNOWN"); } }
 #define GL_CALL(statement) statement; GL_CHECK_ERROR()
 #else
 #define GL_CHECK_ERROR()
 #define GL_CALL(statement) statement;
+#endif
 #endif
 
 typedef struct mesh_node {
@@ -47,6 +59,7 @@ typedef struct mesh_node {
 	struct mesh_node * sibling;
 	struct mesh_node * prior_sibling;
 
+	#if (KGFW_OPENGL == 33)
 	struct {
 		GLuint vao;
 		GLuint vbo;
@@ -58,14 +71,12 @@ typedef struct mesh_node {
 		unsigned long long int vbo_size;
 		unsigned long long int ibo_size;
 	} gl;
+	#endif
 } mesh_node_t;
 
 struct {
 	kgfw_window_t * window;
 	kgfw_camera_t * camera;
-	GLuint vshader;
-	GLuint fshader;
-	GLuint program;
 	mat4x4 vp;
 
 	mesh_node_t * mesh_root;
@@ -80,9 +91,14 @@ struct {
 		float speculation;
 		float metalic;
 	} light;
+
+	#if (KGFW_OPENGL == 33)
+	struct {
+		GLuint program;
+	} gl;
+	#endif
 } static state = {
 	NULL, NULL,
-	0, 0, 0,
 	{ 0 },
 	NULL,
 	KGFW_GRAPHICS_SETTINGS_DEFAULT,
@@ -90,7 +106,10 @@ struct {
 		{ 0, 100, 0 },
 		{ 1, 1, 1 },
 		0.0f, 0.5f, 0.25f, 8
-	}
+	},
+	#if (KGFW_OPENGL == 33)
+	{ 0 },
+	#endif
 };
 
 struct {
@@ -118,9 +137,12 @@ static mesh_node_t * meshes_new(void);
 static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m);
 static void meshes_free_recursive_fchild(mesh_node_t * mesh);
 static void meshes_free_recursive(mesh_node_t * mesh);
+static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m);
 static void gl_errors(void);
 
+#if (KGFW_OPENGL == 33)
 static int shaders_load(const char * vpath, const char * fpath, GLuint * out_program);
+#endif
 
 void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsigned int settings) {
 	unsigned int change = 0;
@@ -149,6 +171,7 @@ unsigned int kgfw_graphics_settings_get(void) {
 	return state.settings;
 }
 
+#if (KGFW_OPENGL == 33)
 int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	register_commands();
 
@@ -173,8 +196,8 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		}
 	}
 
-	state.program = GL_CALL(glCreateProgram());
-	int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
+	state.gl.program = GL_CALL(glCreateProgram());
+	int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.gl.program);
 	if (r != 0) {
 		return r;
 	}
@@ -291,14 +314,10 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 	GL_CALL(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, r)));
 	GL_CALL(glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, nx)));
 	GL_CALL(glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, u)));
-	GL_CALL(glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, tx)));
-	GL_CALL(glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(kgfw_graphics_vertex_t), (void *) offsetof(kgfw_graphics_vertex_t, btx)));
 	GL_CALL(glEnableVertexAttribArray(0));
 	GL_CALL(glEnableVertexAttribArray(1));
 	GL_CALL(glEnableVertexAttribArray(2));
 	GL_CALL(glEnableVertexAttribArray(3));
-	GL_CALL(glEnableVertexAttribArray(4));
-	GL_CALL(glEnableVertexAttribArray(5));
 
 	if (parent == NULL) {
 		if (state.mesh_root == NULL) {
@@ -349,15 +368,6 @@ void kgfw_graphics_mesh_destroy(kgfw_graphics_mesh_node_t * mesh) {
 	meshes_free((mesh_node_t *) mesh);
 }
 
-void kgfw_graphics_debug_line(vec3 p0, vec3 p1) {
-	GLuint vao;
-	GLuint vbo;
-
-	GL_CALL(glGenVertexArrays(1, &vao));
-	GL_CALL(glGenBuffers(1, &vbo));
-	GL_CALL(glBindVertexArray(vao));
-}
-
 void kgfw_graphics_set_window(kgfw_window_t * window) {
 	state.window = window;
 	if (window != NULL) {
@@ -370,27 +380,6 @@ void kgfw_graphics_set_window(kgfw_window_t * window) {
 
 void kgfw_graphics_viewport(unsigned int width, unsigned int height) {
 	GL_CALL(glViewport(0, 0, width, height));
-}
-
-kgfw_window_t * kgfw_graphics_get_window(void) {
-	return state.window;
-}
-
-void kgfw_graphics_deinit(void) {
-	meshes_free_recursive_fchild(state.mesh_root);
-}
-
-static mesh_node_t * meshes_alloc(void) {
-	mesh_node_t * m = malloc(sizeof(mesh_node_t));
-	if (m == NULL) {
-		return NULL;
-	}
-
-	memset(m, 0, sizeof(*m));
-	m->transform.scale[0] = 1;
-	m->transform.scale[1] = 1;
-	m->transform.scale[2] = 1;
-	return m;
 }
 
 static void meshes_free(mesh_node_t * node) {
@@ -428,51 +417,6 @@ static void meshes_gen(mesh_node_t * node) {
 	node->gl.normal = 0;
 }
 
-static mesh_node_t * meshes_new(void) {
-	mesh_node_t * m = meshes_alloc();	
-	if (m == NULL) {
-		return NULL;
-	}
-
-	meshes_gen(m);
-	return m;
-}
-
-static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
-	if (mesh->transform.absolute) {
-		mat4x4_identity(out_m);
-		mat4x4_translate(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[0] + mesh->transform.pos[2]);
-		recurse_state.pos[0] = mesh->transform.pos[0];
-		recurse_state.pos[1] = mesh->transform.pos[1];
-		recurse_state.pos[2] = mesh->transform.pos[2];
-		recurse_state.rot[0] = mesh->transform.rot[0];
-		recurse_state.rot[1] = mesh->transform.rot[1];
-		recurse_state.rot[2] = mesh->transform.rot[2];
-		recurse_state.scale[0] = mesh->transform.scale[0];
-		recurse_state.scale[1] = mesh->transform.scale[1];
-		recurse_state.scale[2] = mesh->transform.scale[2];
-	} else {
-		mat4x4_translate_in_place(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[2] + mesh->transform.pos[2]);
-		recurse_state.pos[0] += mesh->transform.pos[0];
-		recurse_state.pos[1] += mesh->transform.pos[1];
-		recurse_state.pos[2] += mesh->transform.pos[2];
-		recurse_state.rot[0] += mesh->transform.rot[0];
-		recurse_state.rot[1] += mesh->transform.rot[1];
-		recurse_state.rot[2] += mesh->transform.rot[2];
-		recurse_state.scale[0] *= mesh->transform.scale[0];
-		recurse_state.scale[1] *= mesh->transform.scale[1];
-		recurse_state.scale[2] *= mesh->transform.scale[2];
-	}
-	mat4x4_identity(recurse_state.model_r);
-	mat4x4_rotate_X(out_m, out_m, (recurse_state.rot[0]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Y(out_m, out_m, (recurse_state.rot[1]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Z(out_m, out_m, (recurse_state.rot[2]) * 3.141592f / 180.0f);
-	mat4x4_rotate_X(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[0]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Y(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[1]) * 3.141592f / 180.0f);
-	mat4x4_rotate_Z(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[2]) * 3.141592f / 180.0f);
-	mat4x4_scale_aniso(out_m, out_m, recurse_state.scale[0], recurse_state.scale[1], recurse_state.scale[2]);
-}
-
 static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	if (mesh == NULL || out_m == NULL) {
 		return;
@@ -481,23 +425,23 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 		return;
 	}
 
-	GLuint program = (mesh->gl.program == 0) ? state.program : mesh->gl.program;
+	GLuint program = (mesh->gl.program == 0) ? state.gl.program : mesh->gl.program;
 	GL_CALL(glUseProgram(program));
-	GLint uniform_model = GL_CALL(glGetUniformLocation(state.program, "unif_m"));
-	GLint uniform_model_r = GL_CALL(glGetUniformLocation(state.program, "unif_m_r"));
-	GLint uniform_vp = GL_CALL(glGetUniformLocation(state.program, "unif_vp"));
-	GLint uniform_time = GL_CALL(glGetUniformLocation(state.program, "unif_time"));
-	GLint uniform_view = GL_CALL(glGetUniformLocation(state.program, "unif_view_pos"));
-	GLint uniform_light = GL_CALL(glGetUniformLocation(state.program, "unif_light_pos"));
-	GLint uniform_light_color = GL_CALL(glGetUniformLocation(state.program, "unif_light_color"));
-	GLint uniform_ambience = GL_CALL(glGetUniformLocation(state.program, "unif_ambience"));
-	GLint uniform_diffusion = GL_CALL(glGetUniformLocation(state.program, "unif_diffusion"));
-	GLint uniform_speculation = GL_CALL(glGetUniformLocation(state.program, "unif_speculation"));
-	GLint uniform_metalic = GL_CALL(glGetUniformLocation(state.program, "unif_metalic"));
-	GLint uniform_texture_weight = GL_CALL(glGetUniformLocation(state.program, "unif_texture_weight"));
-	GLint uniform_texture_color = GL_CALL(glGetUniformLocation(state.program, "unif_texture_color"));
-	GLint uniform_normal_weight = GL_CALL(glGetUniformLocation(state.program, "unif_normal_weight"));
-	GLint uniform_texture_normal = GL_CALL(glGetUniformLocation(state.program, "unif_texture_normal"));
+	GLint uniform_model = GL_CALL(glGetUniformLocation(state.gl.program, "unif_m"));
+	GLint uniform_model_r = GL_CALL(glGetUniformLocation(state.gl.program, "unif_m_r"));
+	GLint uniform_vp = GL_CALL(glGetUniformLocation(state.gl.program, "unif_vp"));
+	GLint uniform_time = GL_CALL(glGetUniformLocation(state.gl.program, "unif_time"));
+	GLint uniform_view = GL_CALL(glGetUniformLocation(state.gl.program, "unif_view_pos"));
+	GLint uniform_light = GL_CALL(glGetUniformLocation(state.gl.program, "unif_light_pos"));
+	GLint uniform_light_color = GL_CALL(glGetUniformLocation(state.gl.program, "unif_light_color"));
+	GLint uniform_ambience = GL_CALL(glGetUniformLocation(state.gl.program, "unif_ambience"));
+	GLint uniform_diffusion = GL_CALL(glGetUniformLocation(state.gl.program, "unif_diffusion"));
+	GLint uniform_speculation = GL_CALL(glGetUniformLocation(state.gl.program, "unif_speculation"));
+	GLint uniform_metalic = GL_CALL(glGetUniformLocation(state.gl.program, "unif_metalic"));
+	GLint uniform_texture_weight = GL_CALL(glGetUniformLocation(state.gl.program, "unif_texture_weight"));
+	GLint uniform_texture_color = GL_CALL(glGetUniformLocation(state.gl.program, "unif_texture_color"));
+	GLint uniform_normal_weight = GL_CALL(glGetUniformLocation(state.gl.program, "unif_normal_weight"));
+	GLint uniform_texture_normal = GL_CALL(glGetUniformLocation(state.gl.program, "unif_texture_normal"));
 
 	mat4x4_identity(out_m);
 	mesh_transform(mesh, out_m);
@@ -542,150 +486,6 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, mesh->gl.vbo));
 	GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->gl.ibo));
 	GL_CALL(glDrawElements(GL_TRIANGLES, mesh->gl.ibo_size, GL_UNSIGNED_INT, 0));
-}
-
-static void meshes_draw_recursive(mesh_node_t * mesh) {
-	if (mesh == NULL) {
-		return;
-	}
-
-	mesh_draw(mesh, recurse_state.model);
-	if (mesh->child == NULL) {
-		return;
-	}
-
-	meshes_draw_recursive_fchild(mesh->child);
-}
-
-static void meshes_draw_recursive_fchild(mesh_node_t * mesh) {
-	if (mesh == NULL) {
-		return;
-	}
-
-	vec3 pos;
-	vec3 rot;
-	vec3 scale;
-	memcpy(pos, recurse_state.pos, sizeof(pos));
-	memcpy(rot, recurse_state.rot, sizeof(rot));
-	memcpy(scale, recurse_state.scale, sizeof(scale));
-	
-	meshes_draw_recursive(mesh);
-	for (mesh_node_t * m = mesh;;) {
-		m = m->sibling;
-		if (m == NULL) {
-			break;
-		}
-
-		memcpy(recurse_state.pos, pos, sizeof(pos));
-		memcpy(recurse_state.rot, rot, sizeof(rot));
-		memcpy(recurse_state.scale, scale, sizeof(scale));
-		meshes_draw_recursive(m);
-	}
-}
-
-static void meshes_free_recursive(mesh_node_t * mesh) {
-	if (mesh == NULL) {
-		return;
-	}
-
-	if (mesh->child == NULL) {
-		return;
-	}
-
-	meshes_free_recursive_fchild(mesh->child);
-	meshes_free(mesh);
-}
-
-static void meshes_free_recursive_fchild(mesh_node_t * mesh) {
-	if (mesh == NULL) {
-		return;
-	}
-
-	meshes_free_recursive(mesh);
-	for (mesh_node_t * m = mesh;;) {
-		m = m->sibling;
-		if (m == NULL) {
-			break;
-		}
-
-		meshes_free_recursive(m);
-	}
-}
-
-static void update_settings(unsigned int change) {
-	if (change & KGFW_GRAPHICS_SETTINGS_VSYNC) {
-		if (state.window != NULL) {
-			glfwSwapInterval((state.settings & KGFW_GRAPHICS_SETTINGS_VSYNC));
-		}
-	}
-}
-
-static int gfx_command(int argc, char ** argv) {
-	const char * subcommands = "set    enable    disable    reload";
-	if (argc < 2) {
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "subcommands: %s", subcommands);
-		return 0;
-	}
-	
-	if (strcmp("reload", argv[1]) == 0) {
-		const char * options = "vsync";
-		const char * arguments = "[option]    see 'gfx options'";
-		if (argc < 3) {
-			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", arguments);
-			return 0;
-		}
-
-		if (strcmp("shaders", argv[2]) == 0) {
-			GL_CALL(glDeleteProgram(state.program));
-			state.program = GL_CALL(glCreateProgram());
-			int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
-			if (r != 0) {
-				return r;
-			}
-			return 0;
-		}
-
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no option %s", argv[2]);
-	} else if (strcmp("enable", argv[1]) == 0) {
-		const char * options = "vsync";
-		const char * arguments = "[option]    see 'gfx options'";
-		if (argc < 3) {
-			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", arguments);
-			return 0;
-		}
-
-		if (strcmp("vsync", argv[2]) == 0) {
-			kgfw_graphics_settings_set(KGFW_GRAPHICS_SETTINGS_ACTION_ENABLE, KGFW_GRAPHICS_SETTINGS_VSYNC);
-			return 0;
-		}
-
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no option %s", argv[2]);
-	} else if (strcmp("disable", argv[1]) == 0) {
-		const char * options = "vsync";
-		const char * arguments = "[option]    see 'gfx options'";
-		if (argc < 3) {
-			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", arguments);
-			return 0;
-		}
-
-		if (strcmp("vsync", argv[2]) == 0) {
-			kgfw_graphics_settings_set(KGFW_GRAPHICS_SETTINGS_ACTION_DISABLE, KGFW_GRAPHICS_SETTINGS_VSYNC);
-			return 0;
-		}
-
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no option %s", argv[2]);
-	} else if (strcmp("options", argv[1]) == 0) {
-		const char * options = "vsync    shaders";
-		const char * arguments = "[option]    see 'gfx options'";
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "options: %s", options);
-	} else {
-		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "subcommands: %s", subcommands);
-	}
-	return 0;
-}
-
-static void register_commands(void) {
-	kgfw_console_register_command("gfx", gfx_command);
 }
 
 static void gl_errors(void) {
@@ -816,4 +616,224 @@ static int shaders_load(const char * vpath, const char * fpath, GLuint * out_pro
 	GL_CALL(glDeleteShader(frag));
 
 	return 0;
+}
+
+#endif
+
+kgfw_window_t * kgfw_graphics_get_window(void) {
+	return state.window;
+}
+
+void kgfw_graphics_deinit(void) {
+	meshes_free_recursive_fchild(state.mesh_root);
+}
+
+static mesh_node_t * meshes_alloc(void) {
+	mesh_node_t * m = malloc(sizeof(mesh_node_t));
+	if (m == NULL) {
+		return NULL;
+	}
+
+	memset(m, 0, sizeof(*m));
+	m->transform.scale[0] = 1;
+	m->transform.scale[1] = 1;
+	m->transform.scale[2] = 1;
+	return m;
+}
+
+static mesh_node_t * meshes_new(void) {
+	mesh_node_t * m = meshes_alloc();	
+	if (m == NULL) {
+		return NULL;
+	}
+
+	meshes_gen(m);
+	return m;
+}
+
+static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
+	if (mesh->transform.absolute) {
+		mat4x4_identity(out_m);
+		mat4x4_translate(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[0] + mesh->transform.pos[2]);
+		recurse_state.pos[0] = mesh->transform.pos[0];
+		recurse_state.pos[1] = mesh->transform.pos[1];
+		recurse_state.pos[2] = mesh->transform.pos[2];
+		recurse_state.rot[0] = mesh->transform.rot[0];
+		recurse_state.rot[1] = mesh->transform.rot[1];
+		recurse_state.rot[2] = mesh->transform.rot[2];
+		recurse_state.scale[0] = mesh->transform.scale[0];
+		recurse_state.scale[1] = mesh->transform.scale[1];
+		recurse_state.scale[2] = mesh->transform.scale[2];
+	}
+	else {
+		mat4x4_translate_in_place(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[2] + mesh->transform.pos[2]);
+		recurse_state.pos[0] += mesh->transform.pos[0];
+		recurse_state.pos[1] += mesh->transform.pos[1];
+		recurse_state.pos[2] += mesh->transform.pos[2];
+		recurse_state.rot[0] += mesh->transform.rot[0];
+		recurse_state.rot[1] += mesh->transform.rot[1];
+		recurse_state.rot[2] += mesh->transform.rot[2];
+		recurse_state.scale[0] *= mesh->transform.scale[0];
+		recurse_state.scale[1] *= mesh->transform.scale[1];
+		recurse_state.scale[2] *= mesh->transform.scale[2];
+	}
+	mat4x4_identity(recurse_state.model_r);
+	mat4x4_rotate_X(out_m, out_m, (recurse_state.rot[0]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Y(out_m, out_m, (recurse_state.rot[1]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Z(out_m, out_m, (recurse_state.rot[2]) * 3.141592f / 180.0f);
+	mat4x4_rotate_X(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[0]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Y(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[1]) * 3.141592f / 180.0f);
+	mat4x4_rotate_Z(recurse_state.model_r, recurse_state.model_r, (recurse_state.rot[2]) * 3.141592f / 180.0f);
+	mat4x4_scale_aniso(out_m, out_m, recurse_state.scale[0], recurse_state.scale[1], recurse_state.scale[2]);
+}
+
+static void meshes_draw_recursive(mesh_node_t * mesh) {
+	if (mesh == NULL) {
+		return;
+	}
+
+	mesh_draw(mesh, recurse_state.model);
+	if (mesh->child == NULL) {
+		return;
+	}
+
+	meshes_draw_recursive_fchild(mesh->child);
+}
+
+static void meshes_draw_recursive_fchild(mesh_node_t * mesh) {
+	if (mesh == NULL) {
+		return;
+	}
+
+	vec3 pos;
+	vec3 rot;
+	vec3 scale;
+	memcpy(pos, recurse_state.pos, sizeof(pos));
+	memcpy(rot, recurse_state.rot, sizeof(rot));
+	memcpy(scale, recurse_state.scale, sizeof(scale));
+
+	meshes_draw_recursive(mesh);
+	for (mesh_node_t * m = mesh;;) {
+		m = m->sibling;
+		if (m == NULL) {
+			break;
+		}
+
+		memcpy(recurse_state.pos, pos, sizeof(pos));
+		memcpy(recurse_state.rot, rot, sizeof(rot));
+		memcpy(recurse_state.scale, scale, sizeof(scale));
+		meshes_draw_recursive(m);
+	}
+}
+
+static void meshes_free_recursive(mesh_node_t * mesh) {
+	if (mesh == NULL) {
+		return;
+	}
+
+	if (mesh->child == NULL) {
+		return;
+	}
+
+	meshes_free_recursive_fchild(mesh->child);
+	meshes_free(mesh);
+}
+
+static void meshes_free_recursive_fchild(mesh_node_t * mesh) {
+	if (mesh == NULL) {
+		return;
+	}
+
+	meshes_free_recursive(mesh);
+	for (mesh_node_t * m = mesh;;) {
+		m = m->sibling;
+		if (m == NULL) {
+			break;
+		}
+
+		meshes_free_recursive(m);
+	}
+}
+
+static void update_settings(unsigned int change) {
+	if (change & KGFW_GRAPHICS_SETTINGS_VSYNC) {
+		if (state.window != NULL) {
+			glfwSwapInterval((state.settings & KGFW_GRAPHICS_SETTINGS_VSYNC));
+		}
+	}
+}
+
+static int gfx_command(int argc, char ** argv) {
+	const char * subcommands = "set    enable    disable    reload";
+	if (argc < 2) {
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "subcommands: %s", subcommands);
+		return 0;
+	}
+
+	if (strcmp("reload", argv[1]) == 0) {
+		const char * options = "vsync";
+		const char * arguments = "[option]    see 'gfx options'";
+		if (argc < 3) {
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", arguments);
+			return 0;
+		}
+
+		if (strcmp("shaders", argv[2]) == 0) {
+			int r = 0;
+			#if (KGFW_OPENGL == 33)
+			GL_CALL(glDeleteProgram(state.gl.program));
+			state.gl.program = GL_CALL(glCreateProgram());
+			r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.gl.program);
+			#endif
+			if (r != 0) {
+				return r;
+			}
+			return 0;
+		}
+
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no option %s", argv[2]);
+	}
+	else if (strcmp("enable", argv[1]) == 0) {
+		const char * options = "vsync";
+		const char * arguments = "[option]    see 'gfx options'";
+		if (argc < 3) {
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", arguments);
+			return 0;
+		}
+
+		if (strcmp("vsync", argv[2]) == 0) {
+			kgfw_graphics_settings_set(KGFW_GRAPHICS_SETTINGS_ACTION_ENABLE, KGFW_GRAPHICS_SETTINGS_VSYNC);
+			return 0;
+		}
+
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no option %s", argv[2]);
+	}
+	else if (strcmp("disable", argv[1]) == 0) {
+		const char * options = "vsync";
+		const char * arguments = "[option]    see 'gfx options'";
+		if (argc < 3) {
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", arguments);
+			return 0;
+		}
+
+		if (strcmp("vsync", argv[2]) == 0) {
+			kgfw_graphics_settings_set(KGFW_GRAPHICS_SETTINGS_ACTION_DISABLE, KGFW_GRAPHICS_SETTINGS_VSYNC);
+			return 0;
+		}
+
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "no option %s", argv[2]);
+	}
+	else if (strcmp("options", argv[1]) == 0) {
+		const char * options = "vsync    shaders";
+		const char * arguments = "[option]    see 'gfx options'";
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "options: %s", options);
+	}
+	else {
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "subcommands: %s", subcommands);
+	}
+	return 0;
+}
+
+static void register_commands(void) {
+	kgfw_console_register_command("gfx", gfx_command);
 }

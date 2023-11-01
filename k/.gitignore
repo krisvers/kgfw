@@ -1,0 +1,10 @@
+*.vcxproj
+*.filters
+*.vcxproj.filters
+*.vcxproj.user
+*.exe
+x64/
+x86/
+*.exp
+*.pdb
+*.ilk

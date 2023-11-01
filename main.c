@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
 #include "kgfw/kgfw.h"
 #include "kgfw/ktga/ktga.h"
 #include "kgfw/koml/koml.h"
@@ -115,10 +116,10 @@ struct {
 };
 
 kgfw_graphics_vertex_t mesh_vertices[4] = {
-	{ -1, -1, 0,	1, 1, 1,	0, 1, 0,	0, 0,	1, 0, 0,	0, 0, 1, },
-	{  1, -1, 0,	1, 1, 1,	0, 1, 0,	1, 0,	1, 0, 0,	0, 0, 1, },
-	{ -1,  1, 0,	1, 1, 1,	0, 1, 0,	0, 1,	1, 0, 0,	0, 0, 1, },
-	{  1,  1, 0,	1, 1, 1,	0, 1, 0,	1, 1,	1, 0, 0,	0, 0, 1, },
+	{ -1, -1, 0,	1, 1, 1,	0, 1, 0,	0, 0,	},
+	{  1, -1, 0,	1, 1, 1,	0, 1, 0,	1, 0,	},
+	{ -1,  1, 0,	1, 1, 1,	0, 1, 0,	0, 1,	},
+	{  1,  1, 0,	1, 1, 1,	0, 1, 0,	1, 1,	},
 };
 
 unsigned int mesh_indices[6] = {
@@ -640,16 +641,10 @@ static gate_t * click(void) {
 		vec3 max = { storage.gates[i].mesh->transform.pos[0] + storage.gates[i].mesh->transform.scale[0], storage.gates[i].mesh->transform.pos[1] + storage.gates[i].mesh->transform.scale[1], storage.gates[i].mesh->transform.pos[2] + storage.gates[i].mesh->transform.scale[2] };
 		vec3 min = { storage.gates[i].mesh->transform.pos[0] - storage.gates[i].mesh->transform.scale[0], storage.gates[i].mesh->transform.pos[1] - storage.gates[i].mesh->transform.scale[1], storage.gates[i].mesh->transform.pos[2] - storage.gates[i].mesh->transform.scale[2] };
 
-		//kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos %f %f %f %f dir %f %f %f %f", pos[0], pos[1], pos[2], pos[3], dir[0], dir[1], dir[2], dir[3]);
-		//kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "max %f %f %f min %f %f %f", max[0], max[1], max[2], min[0], min[1], min[2]);
 		if ((pos[0] > min[0])) {
-			//kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos[0] > min[0]");
 			if ((pos[0] < max[0])) {
-				//kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos[0] < max[0]");
 				if ((pos[1] > min[1])) {
-					//kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "pos[1] > min[1]");
 					if ((pos[1] < max[1])) {
-						//kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "hit");
 						return &storage.gates[i];
 					}
 				}
@@ -1058,7 +1053,7 @@ static unsigned char evaluate(gate_t * gate) {
 		};
 		kgfw_graphics_mesh_texture(gate->mesh, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 		gate->value = v;
-		gate->evaluated = 1;
+		//gate->evaluated = 1;
 		return v;
 	} else if (gate->type == GATE_AND) {
 		wire_t * l = gate->left;
@@ -1101,7 +1096,7 @@ static unsigned char evaluate(gate_t * gate) {
 			kgfw_graphics_mesh_texture(r->mesh, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 		}
 		gate->value = v;
-		gate->evaluated = 1;
+		//gate->evaluated = 1;
 		return v;
 	} else if (gate->type == GATE_OR) {
 		wire_t * l = gate->left;
@@ -1146,7 +1141,7 @@ static unsigned char evaluate(gate_t * gate) {
 			kgfw_graphics_mesh_texture(r->mesh, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 		}
 		gate->value = v;
-		gate->evaluated = 1;
+		//gate->evaluated = 1;
 		return v;
 	} else if (gate->type == GATE_XOR) {
 		wire_t * l = gate->left;
@@ -1191,7 +1186,7 @@ static unsigned char evaluate(gate_t * gate) {
 			kgfw_graphics_mesh_texture(r->mesh, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 		}
 		gate->value = v;
-		gate->evaluated = 1;
+		//gate->evaluated = 1;
 		return v;
 	}
 	else if (gate->type == GATE_NOT) {
@@ -1218,7 +1213,7 @@ static unsigned char evaluate(gate_t * gate) {
 			kgfw_graphics_mesh_texture(l->mesh, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 		}
 		gate->value = v;
-		gate->evaluated = 1;
+		//gate->evaluated = 1;
 		return v;
 	} else if (gate->type == GATE_RELAY) {
 		wire_t * l = gate->left;
@@ -1255,12 +1250,12 @@ static unsigned char evaluate(gate_t * gate) {
 		};
 		kgfw_graphics_mesh_texture(gate->mesh, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 		gate->value = v;
-		gate->evaluated = 1;
+		//gate->evaluated = 1;
 		return v;
 	}
 
 	gate->value = v;
-	gate->evaluated = 1;
+	//gate->evaluated = 1;
 	return v;
 }
 
