@@ -3,17 +3,17 @@
 
 ### Supported Platforms:
 
-| `Symbol` |       `Meaning`      |
+|  Symbol  |        Meaning       |
 | :------: | :------------------: |
-|   `X`    | `Supported & Tested` |
-|   `~`    |      `Untested`      |
-|   ` `    |     `Unsupported`    |
-|   `?`    |       `Planned`      |
+|    X     | `Supported & Tested` |
+|    ~     |      `Untested`      |
+|          |     `Unsupported`    |
+|    ?     |       `Planned`      |
 
-|                | `macOS` | `Linux` | `Windows` | `BSD/UNIX` | `Android` |
+|                |  macOS  |  Linux  |  Windows  |  BSD/UNIX  |  Android  |
 | :------------- | :-----: | :-----: | :-------: | :--------: | :-------: |
-| `D3D11`        |         |         |    `X`    |            |           |
-| `OpenGL`       |   `X`   |   `X`   |    `X`    |    `~`     |    `?`    |
+| D3D11          |         |         |     X     |            |           |
+| OpenGL         |    X    |    X    |     X     |     ~      |     ?     |
 
 ### Capabilities:
 
