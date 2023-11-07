@@ -659,7 +659,7 @@ static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsign
 	if (button == KGFW_MOUSE_LBUTTON && action == 1) {
 		storage.current = click();
 		if (storage.current != NULL && storage.current->mesh != NULL) {
-			kgfw_audio_play_sound("click", (storage.current->mesh->transform.pos[0] - state.camera.pos[0]) / 25.0f, (storage.current->mesh->transform.pos[1] - state.camera.pos[1]) / 25.0f, (storage.current->mesh->transform.pos[2] - state.camera.pos[2]) / 25.0f, 1, 1, 0, 1);
+			//kgfw_audio_play_sound("click", (storage.current->mesh->transform.pos[0] - state.camera.pos[0]) / 25.0f, (storage.current->mesh->transform.pos[1] - state.camera.pos[1]) / 25.0f, (storage.current->mesh->transform.pos[2] - state.camera.pos[2]) / 25.0f, 1, 1, 0, 1);
 			//kgfw_graphics_mesh_texture_detach(storage.current, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 		} else {
 			

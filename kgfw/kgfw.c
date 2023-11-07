@@ -1,3 +1,7 @@
+#include "kgfw_defines.h"
+
+#if (KGFW_OPENGL == 33)
+
 #include "kgfw.h"
 #include <GLFW/glfw3.h>
 
@@ -27,3 +31,18 @@ int kgfw_update(void) {
 static void glfw_error(int error, const char * desc) {
 	kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "[GLFW] %i 0x%X: %s", error, error, desc);
 }
+
+#elif (KGFW_DIRECTX == 11)
+
+int kgfw_init(void) {
+	return 0;
+}
+
+void kgfw_deinit(void) {
+	return;
+}
+
+int kgfw_update(void) {
+	return 0;
+}
+#endif

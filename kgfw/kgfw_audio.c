@@ -203,7 +203,7 @@ int kgfw_audio_init(void) {
 			free(kwav.data);
 		}
 	} else {
-		kgfw_logf(KGFW_LOG_SEVERITY_WARN, "no config.koml with audio files");
+		//kgfw_logf(KGFW_LOG_SEVERITY_WARN, "no config.koml with audio files");
 	}
 
 	return 0;

@@ -2,11 +2,6 @@
 #define KRISVERS_KGFW_GRAPHICS_H
 
 #include "kgfw_defines.h"
-
-#if (KGFW_OPENGL != 33 && KGFW_D3D != 11)
-#error "No macro defined for graphics api. You can use KGFW_OPENGL 33 or KGFW_D3D 11"
-#endif
-
 #include "kgfw_window.h"
 #include "kgfw_camera.h"
 #include "../lib/include/linmath.h"
@@ -73,17 +68,29 @@ typedef struct kgfw_graphics_mesh_node {
 	struct kgfw_graphics_mesh_node * sibling;
 	struct kgfw_graphics_mesh_node * prior_sibling;
 
-	struct {
-		unsigned int _a;
-		unsigned int _b;
-		unsigned int _c;
-		unsigned int _d;
-		unsigned int _e;
-		unsigned int _f;
+	union {
+		struct {
+			unsigned int _a;
+			unsigned int _b;
+			unsigned int _c;
+			unsigned int _d;
+			unsigned int _e;
+			unsigned int _f;
 
-		unsigned long long int _y;
-		unsigned long long int _z;
-	} _internal;
+			unsigned long long int _g;
+			unsigned long long int _h;
+		} _a;
+
+		struct {
+			void * _a;
+			void * _b;
+			void * _c;
+			void * _d;
+
+			unsigned long long int _e;
+			unsigned long long int _f;
+		} _b;
+	}_internal;
 } kgfw_graphics_mesh_node_t;
 
 typedef enum kgfw_graphics_settings_action {

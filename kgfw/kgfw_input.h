@@ -167,4 +167,11 @@ KGFW_PUBLIC int kgfw_input_key_register_callback(kgfw_input_key_callback callbac
 /* register a callback for mouse button input */
 KGFW_PUBLIC int kgfw_input_mouse_button_register_callback(kgfw_input_mouse_button_callback callback);
 
+KGFW_PUBLIC void kgfw_input_press_key_down(kgfw_input_key_enum key);
+KGFW_PUBLIC void kgfw_input_press_key_up(kgfw_input_key_enum key);
+KGFW_PUBLIC void kgfw_input_press_mouse_button_down(kgfw_input_mouse_button_enum button);
+KGFW_PUBLIC void kgfw_input_press_mouse_button_up(kgfw_input_mouse_button_enum button);
+KGFW_PUBLIC void kgfw_input_set_mouse_pos(float x, float y);
+KGFW_PUBLIC void kgfw_input_set_mouse_scroll(float x, float y);
+
 #endif

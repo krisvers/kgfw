@@ -5,7 +5,6 @@ layout (location = 1) in vec3 in_color;
 layout (location = 2) in vec3 in_normal;
 layout (location = 3) in vec2 in_uv;
 uniform mat4 unif_m;
-uniform mat4 unif_m_r;
 uniform mat4 unif_vp;
 out vec3 v_pos;
 out vec3 v_color;

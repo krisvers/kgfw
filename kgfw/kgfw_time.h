@@ -8,5 +8,6 @@ KGFW_PUBLIC void kgfw_time_update(void);
 KGFW_PUBLIC float kgfw_time_delta(void);
 KGFW_PUBLIC void kgfw_time_start(void);
 KGFW_PUBLIC void kgfw_time_end(void);
+KGFW_PUBLIC void kgfw_time_init(void);
 
 #endif
