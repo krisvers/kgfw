@@ -8,4 +8,6 @@ x86/
 *.exp
 *.pdb
 *.ilk
-/Debug
+OpenGL 3.3 Debug/
+D3D11 Debug/
+Debug/
