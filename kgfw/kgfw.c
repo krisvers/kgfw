@@ -1,6 +1,6 @@
 #include "kgfw_defines.h"
 
-#if (KGFW_OPENGL == 33)
+#if (KGFW_OPENGL == 33 || defined(KGFW_VULKAN))
 
 #include "kgfw.h"
 #include <GLFW/glfw3.h>

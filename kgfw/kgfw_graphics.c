@@ -898,6 +898,8 @@ struct {
 	ID3D11Buffer * ubuffer;
 	ID3D11BlendState * blend;
 	ID3D11RasterizerState * rasterizer;
+	ID3D11DepthStencilState * depth;
+	ID3D11DepthStencilView * depth_view;
 	ID3D11RenderTargetView * target;
 } static state = {
 	NULL, NULL,
@@ -912,7 +914,8 @@ struct {
 	NULL, NULL,
 	NULL,
 	NULL, NULL, NULL, NULL,
-	NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL,
+	NULL,
 };
 
 struct {
@@ -1081,17 +1084,45 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		backbuffer->lpVtbl->Release(backbuffer);
 	}
 
-	if (window != NULL) {
-		if (window->internal != NULL) {
+	{
+		D3D11_DEPTH_STENCIL_DESC desc = {
+			TRUE,
+			D3D11_DEPTH_WRITE_MASK_ALL, D3D11_COMPARISON_LESS,
+			TRUE,
+			0xFF, 0xFF,
+			{ D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_INCR, D3D11_STENCIL_OP_KEEP, D3D11_COMPARISON_ALWAYS },
+			{ D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_DECR, D3D11_STENCIL_OP_KEEP, D3D11_COMPARISON_ALWAYS },
+		};
 
-		}
+		D3D11_CALL(state.dev->lpVtbl->CreateDepthStencilState(state.dev, &desc, &state.depth));
 	}
 
-	//state.program = GL_CALL(glCreateProgram());
-	//int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
-	//if (r != 0) {
-	//	return r;
-	//}
+	{
+		ID3D11Texture2D * depth;
+		{
+			D3D11_TEXTURE2D_DESC desc = {
+				state.window->width, state.window->height,
+				1, 1,
+				DXGI_FORMAT_D32_FLOAT,
+				{ 1, 0 },
+				D3D11_USAGE_DEFAULT,
+				D3D11_BIND_DEPTH_STENCIL,
+				0, 0
+			};
+			D3D11_CALL(state.dev->lpVtbl->CreateTexture2D(state.dev, &desc, NULL, &depth));
+		}
+
+		{
+			D3D11_DEPTH_STENCIL_VIEW_DESC desc = {
+				DXGI_FORMAT_D32_FLOAT,
+				D3D11_DSV_DIMENSION_TEXTURE2D,
+			};
+			desc.Texture2D.MipSlice = 0;
+
+			D3D11_CALL(state.dev->lpVtbl->CreateDepthStencilView(state.dev, (ID3D11Resource *) depth, &desc, &state.depth_view));
+		}
+		depth->lpVtbl->Release(depth);
+	}
 
 	update_settings(state.settings);
 
@@ -1101,6 +1132,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 void kgfw_graphics_draw(void) {
 	float color[4] = { 0.57f, 0.59f, 0.58f, 1.0f };
 	state.devctx->lpVtbl->ClearRenderTargetView(state.devctx, state.target, color);
+	state.devctx->lpVtbl->ClearDepthStencilView(state.devctx, state.depth_view, D3D11_CLEAR_DEPTH, 1, 0xFF);
 
 	mat4x4 mvp;
 	mat4x4 m;
@@ -1435,8 +1467,9 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	state.devctx->lpVtbl->PSSetShaderResources(state.devctx, 0, 1, &mesh->d3d11.tex);
 	state.devctx->lpVtbl->PSSetShader(state.devctx, state.pshader, NULL, 0);
 
-	state.devctx->lpVtbl->OMSetBlendState(state.devctx, state.blend, NULL, ~0U);
-	state.devctx->lpVtbl->OMSetRenderTargets(state.devctx, 1, &state.target, NULL);
+	state.devctx->lpVtbl->OMSetDepthStencilState(state.devctx, state.depth, 1);
+	state.devctx->lpVtbl->OMSetBlendState(state.devctx, state.blend, NULL, 0xFFFFFFFFFFFFFFFF);
+	state.devctx->lpVtbl->OMSetRenderTargets(state.devctx, 1, &state.target, state.depth_view);
 	
 	state.devctx->lpVtbl->DrawIndexed(state.devctx, mesh->d3d11.ibo_size, 0, 0);
 }
@@ -1533,12 +1566,17 @@ static int gfx_command(int argc, char ** argv) {
 		}
 
 		if (strcmp("shaders", argv[2]) == 0) {
-			//GL_CALL(glDeleteProgram(state.program));
-			//state.program = GL_CALL(glCreateProgram());
-			//int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
-			//if (r != 0) {
-			//	return r;
-			//}
+			if (state.vshader != NULL) {
+				state.vshader->lpVtbl->Release(state.vshader);
+				state.vshader = NULL;
+			}
+			if (state.pshader != NULL) {
+				state.pshader->lpVtbl->Release(state.pshader);
+				state.pshader = NULL;
+			}
+			if (shaders_load("assets/shaders/vertex.hlsl", "assets/shaders/pixel.hlsl", &state.vshader, &state.pshader) != 0) {
+				return 1;
+			}
 			return 0;
 		}
 

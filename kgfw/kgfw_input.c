@@ -2,7 +2,7 @@
 #include "kgfw_input.h"
 #include "kgfw_log.h"
 
-#if (KGFW_OPENGL == 33)
+#if (KGFW_OPENGL == 33 || defined(KGFW_VULKAN))
 #include <string.h>
 #include <GLFW/glfw3.h>
 
