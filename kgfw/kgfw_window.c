@@ -16,12 +16,21 @@ int kgfw_window_create(kgfw_window_t * out_window, unsigned int width, unsigned 
 	out_window->closed = 0;
 	out_window->internal = NULL;
 
+	#if (KGFW_OPENGL == 33)
+
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	#ifdef KGFW_APPLE_MACOS
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	#endif
+
+	#elif (defined(KGFW_VULKAN))
+
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+	#endif
+
 	out_window->internal = glfwCreateWindow(width, height, title, NULL, NULL);
 	if (out_window->internal == NULL) {
 		kgfw_log(KGFW_LOG_SEVERITY_ERROR, "GLFW window creation failed");
@@ -43,7 +52,9 @@ void kgfw_window_destroy(kgfw_window_t * window) {
 }
 
 int kgfw_window_update(kgfw_window_t * window) {
+	#if (KGFW_OPENGL == 33)
 	glfwSwapBuffers(window->internal);
+	#endif
 
 	return 0;
 }
