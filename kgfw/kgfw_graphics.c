@@ -17,8 +17,7 @@
 #define KGFW_GRAPHICS_DEFAULT_VERTICES_COUNT 0
 #define KGFW_GRAPHICS_DEFAULT_INDICES_COUNT 0
 
-
-
+/* if the vk functions return VkResult, wrap the call in a procedural macro called "VK_CALL" */
 #ifdef KGFW_DEBUG
 #define VK_CALL(statement) { VkResult vr = statement; if (vr != VK_SUCCESS) { kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Vulkan Error (%i 0x%x) %s:%u", vr, vr, __FILE__, __LINE__); abort(); } }
 #else
@@ -70,8 +69,14 @@ struct {
 		float metalic;
 	} light;
 
-	VkAllocationCallbacks * allocator;
-	VkInstance instance;
+	struct {
+		VkAllocationCallbacks * allocator;
+		VkInstance instance;
+		VkPhysicalDevice pdev;
+		VkSurfaceKHR surface;
+		VkDevice dev;
+		VkQueue gfx_queue;
+	} vk;
 } static state = {
 	NULL, NULL,
 	{ 0 },
@@ -82,9 +87,13 @@ struct {
 		{ 1, 1, 1 },
 		0.0f, 0.5f, 0.25f, 8
 	},
+
 	NULL,
 	{ 0 },
-
+	VK_NULL_HANDLE,
+	{ 0 },
+	{ 0 },
+	{ 0 },
 };
 
 #ifdef KGFW_DEBUG
@@ -236,7 +245,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		}
 		#endif
 
-		if (vkCreateInstance(&create_info, NULL, &state.instance) != VK_SUCCESS) {
+		if (vkCreateInstance(&create_info, state.vk.allocator, &state.vk.instance) != VK_SUCCESS) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan instance");
 			return 1;
 		}
@@ -255,14 +264,104 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			NULL,
 		};
 
-		PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(state.instance, "vkCreateDebugUtilsMessengerEXT");
+		PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(state.vk.instance, "vkCreateDebugUtilsMessengerEXT");
 		if (vkCreateDebugUtilsMessengerEXT == NULL) {
 			kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "Failed to create Vulkan debug utilities messenger");
 		} else {
-			VK_CALL(vkCreateDebugUtilsMessengerEXT(state.instance, &create_info, state.allocator, &debug_state.messenger));
+			VK_CALL(vkCreateDebugUtilsMessengerEXT(state.vk.instance, &create_info, state.vk.allocator, &debug_state.messenger));
 		}
 	}
 	#endif
+
+	{
+		unsigned int pdev_count = 0;
+		VK_CALL(vkEnumeratePhysicalDevices(state.vk.instance, &pdev_count, NULL));
+
+		VkPhysicalDevice * pdevs = malloc(pdev_count * sizeof(VkPhysicalDevice));
+		if (pdevs == NULL) {
+			return 3;
+		}
+		VK_CALL(vkEnumeratePhysicalDevices(state.vk.instance, &pdev_count, pdevs));
+
+		unsigned int best = 0;
+		int best_score = 0;
+		int score = 0;
+		for (unsigned int i = 0; i < pdev_count; ++i) {
+			VkPhysicalDeviceProperties props;
+			vkGetPhysicalDeviceProperties(pdevs[i], &props);
+			VkPhysicalDeviceFeatures feats;
+			vkGetPhysicalDeviceFeatures(pdevs[i], &feats);
+
+			if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+				score += 1000;
+			}
+
+			score += props.limits.maxImageDimension2D;
+
+			if (score > best_score) {
+				best_score = score;
+				best = i;
+			}
+		}
+
+		state.vk.pdev = pdevs[best];
+		free(pdevs);
+	}
+
+	{
+		unsigned int queue_family_count = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(state.vk.pdev, &queue_family_count, NULL);
+
+		VkQueueFamilyProperties * queue_families = malloc(queue_family_count * sizeof(VkQueueFamilyProperties));
+		if (queue_families == NULL) {
+			return 4;
+		}
+		vkGetPhysicalDeviceQueueFamilyProperties(state.vk.pdev, &queue_family_count, queue_families);
+
+		unsigned int graphics_queue_family = 0;
+		for (unsigned int i = 0; i < queue_family_count; ++i) {
+			if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				graphics_queue_family = i;
+			}
+		}
+
+		free(queue_families);
+
+		float priority = 1.0f;
+		VkDeviceQueueCreateInfo queue_create_info = {
+			VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			NULL,
+			0,
+			graphics_queue_family, 1,
+			&priority,
+		};
+
+		VkPhysicalDeviceFeatures feats = { 0 };
+
+		VkDeviceCreateInfo create_info = {
+			VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			NULL, 0,
+			1, &queue_create_info,
+			0, NULL,
+			0, NULL,
+			&feats,
+		};
+
+		#ifdef KGFW_DEBUG
+		const char * val_layers[1] = {
+			"VK_LAYER_KHRONOS_validation"
+		};
+
+		create_info.enabledLayerCount = 1;
+		create_info.ppEnabledLayerNames = &val_layers;
+		#endif
+
+		if (vkCreateDevice(state.vk.pdev, &create_info, state.vk.allocator, &state.vk.dev) != VK_SUCCESS) {
+			return 5;
+		}
+
+		vkGetDeviceQueue(state.vk.dev, graphics_queue_family, 0, &state.vk.gfx_queue);
+	}
 
 	/*state.program = GL_CALL(glCreateProgram());
 	int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
@@ -278,14 +377,16 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 void kgfw_graphics_deinit(void) {
 	meshes_free_recursive_fchild(state.mesh_root);
 
+	vkDestroyDevice(state.vk.dev, state.vk.allocator);
+
 	#ifdef KGFW_DEBUG
 	if (debug_state.messenger != NULL) {
-		PFN_vkDestroyDebugUtilsMessengerEXT vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(state.instance, "vkDestroyDebugUtilsMessengerEXT");
-		vkDestroyDebugUtilsMessengerEXT(state.instance, debug_state.messenger, state.allocator);
+		PFN_vkDestroyDebugUtilsMessengerEXT vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(state.vk.instance, "vkDestroyDebugUtilsMessengerEXT");
+		vkDestroyDebugUtilsMessengerEXT(state.vk.instance, debug_state.messenger, state.vk.allocator);
 	}
 	#endif
 
-	vkDestroyInstance(state.instance, state.allocator);
+	vkDestroyInstance(state.vk.instance, state.vk.allocator);
 }
 
 void kgfw_graphics_draw(void) {
