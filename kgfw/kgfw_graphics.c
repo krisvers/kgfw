@@ -204,9 +204,39 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	state.camera = camera;
 
 	{
+		VkApplicationInfo app_info = {
+			VK_STRUCTURE_TYPE_APPLICATION_INFO,
+			NULL, "kgfw",
+			VK_MAKE_VERSION(1, 0, 0),
+			"kgfw",
+			VK_MAKE_VERSION(1, 0, 0),
+			VK_API_VERSION_1_0,
+		};
+
+		VkInstanceCreateInfo create_info = {
+			VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+			NULL, 0,
+			&app_info,
+			0, NULL,
+		};
+
 		unsigned int extensions_count = 0;
 		const char ** extensions = NULL;
 		{
+			unsigned int available_count = 0;
+			VkExtensionProperties * available = NULL;
+			vkEnumerateInstanceExtensionProperties(NULL, &available_count, NULL);
+
+			if (available_count > 0) {
+			available = malloc(available_count * sizeof(VkExtensionProperties));
+			if (available != NULL) {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Allocation error");
+				return 1;
+			}
+
+			vkEnumerateInstanceExtensionProperties(NULL, &available_count, available);
+			}
+
 			const char ** ext = glfwGetRequiredInstanceExtensions(&extensions_count);
 			unsigned int extra = 0;
 
@@ -215,6 +245,8 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			#endif
 
 			#ifdef KGFW_APPLE_MACOS
+			unsigned int extension_KHR_PORTABILITY_SUBSET_index = extensions_count + extra; ++extra;
+			KGFW_VK_EXTEND(KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2);
 			KGFW_VK_EXTEND(KHR_PORTABILITY_ENUMERATION);
 			#endif
 
@@ -226,13 +258,15 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 			memcpy(extensions, ext, extensions_count * sizeof(char *));
 
-			#ifdef KGFW_APPLE_MACOS
-			KGFW_VK_SET_EXTENSION(KHR_PORTABILITY_ENUMERATION);
-			create_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-			#endif
-
 			#ifdef KGFW_DEBUG
 			KGFW_VK_SET_EXTENSION(EXT_DEBUG_UTILS);
+			#endif
+
+			#ifdef KGFW_APPLE_MACOS
+			extensions[extension_KHR_PORTABILITY_SUBSET_index] = "VK_KHR_portability_subset";
+			KGFW_VK_SET_EXTENSION(KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2);
+			KGFW_VK_SET_EXTENSION(KHR_PORTABILITY_ENUMERATION);
+			create_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 			#endif
 
 			extensions_count += extra;
@@ -243,22 +277,6 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			}
 			#endif
 		}
-
-		VkApplicationInfo app_info = {
-			VK_STRUCTURE_TYPE_APPLICATION_INFO,
-			NULL, "kgfw",
-			VK_MAKE_VERSION(1, 0, 0),
-			"kgfw",
-			VK_MAKE_VERSION(1, 0, 0),
-			VK_API_VERSION_1_3,
-		};
-
-		VkInstanceCreateInfo create_info = {
-			VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-			NULL, 0,
-			&app_info,
-			0, NULL,
-		};
 
 		create_info.enabledExtensionCount = extensions_count;
 		create_info.ppEnabledExtensionNames = extensions;
