@@ -22,10 +22,16 @@
 
 /* if the vk functions return VkResult, wrap the call in a procedural macro called "VK_CALL" */
 #ifdef KGFW_DEBUG
-#define VK_CALL(statement) { VkResult vr = statement; if (vr != VK_SUCCESS) { kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Vulkan Error (%i 0x%x) %s:%u", vr, vr, __FILE__, __LINE__); abort(); } }
+#define VK_SWAPCHAIN_RESIZE() { vkGetPhysicalDeviceSurfaceCapabilitiesKHR(state.vk.pdev, state.vk.surface, &state.vk.capabilities); if (state.vk.capabilities.currentExtent.width != 0 && state.vk.capabilities.currentExtent.height != 0) { swapchain_destroy(); swapchain_create(); } }
+#define VK_CALL(statement) { VkResult vr = statement; if (vr == VK_ERROR_OUT_OF_DATE_KHR || vr == VK_SUBOPTIMAL_KHR) { VK_SWAPCHAIN_RESIZE(); } else if (vr != VK_SUCCESS) { kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Vulkan Error (%i 0x%x) %s:%u", vr, vr, __FILE__, __LINE__); abort(); } }
+#define VK_CHECK_DO(statement, action) { VkResult vr = statement; if (vr == VK_ERROR_OUT_OF_DATE_KHR || vr == VK_SUBOPTIMAL_KHR) { VK_SWAPCHAIN_RESIZE(); } else if (vr != VK_SUCCESS) { action; } }
 #else
-#define VK_CALL(statement) { statement; }
+#define VK_SWAPCHAIN_RESIZE() { vkGetPhysicalDeviceSurfaceCapabilitiesKHR(state.vk.pdev, state.vk.surface, &state.vk.capabilities); if (state.vk.capabilities.currentExtent.width != 0 && state.vk.capabilities.currentExtent.height != 0) { swapchain_destroy(); swapchain_create(); } }
+#define VK_CALL(statement) { VkResult vr = statement; if (vr == VK_ERROR_OUT_OF_DATE_KHR || vr == VK_SUBOPTIMAL_KHR) { VK_SWAPCHAIN_RESIZE(); } }
+#define VK_CHECK_DO(statement, action) { VkResult vr = statement; if (vr == VK_ERROR_OUT_OF_DATE_KHR || vr == VK_SUBOPTIMAL_KHR) { VK_SWAPCHAIN_RESIZE(); } else if (vr != VK_SUCCESS) { action; } }
 #endif
+
+#define VK_CHECK_DO_NO_SWAP(statement, action) { VkResult vr = statement; if (vr != VK_SUCCESS) { action; } }
 
 typedef struct mesh_node {
 	struct {
@@ -47,12 +53,19 @@ typedef struct mesh_node {
 	struct mesh_node * prior_sibling;
 
 	struct {
-
+		VkBuffer vbuf;
+		VkDeviceMemory vmem;
+		VkBuffer ibuf;
+		VkDeviceMemory imem;
 
 		unsigned long long int vbo_size;
 		unsigned long long int ibo_size;
 	} vk;
 } mesh_node_t;
+
+typedef struct vk_ubo {
+	mat4x4 mvp;
+} vk_ubo_t;
 
 struct {
 	kgfw_window_t * window;
@@ -85,6 +98,11 @@ struct {
 		VkDevice dev;
 		VkQueue gfx_queue;
 		VkQueue pres_queue;
+		VkBuffer ubo;
+		VkDeviceMemory umem;
+		void * ubomap;
+		VkViewport viewport;
+		VkRect2D scissor;
 		struct {
 			VkImage * images;
 			VkImageView * views;
@@ -92,6 +110,9 @@ struct {
 			unsigned int count;
 		} images;
 		struct {
+			VkDescriptorSetLayout desc_layout;
+			VkDescriptorPool desc_pool;
+			VkDescriptorSet desc_set;
 			VkPipelineLayout layout;
 			VkPipeline pipeline;
 			VkRenderPass render_pass;
@@ -104,6 +125,11 @@ struct {
 			VkCommandPool pool;
 			VkCommandBuffer buffer;
 		} cmd;
+		struct {
+			VkSemaphore image_available;
+			VkSemaphore render_finished;
+			VkFence in_flight;
+		} sync;
 		struct {
 			unsigned int graphics;
 			unsigned int present;
@@ -132,8 +158,10 @@ struct {
 
 struct {
 	VkDebugUtilsMessengerEXT messenger;
+	unsigned char exit;
 } static debug_state = {
 	{ 0 },
+	0
 };
 
 #endif
@@ -144,7 +172,8 @@ struct {
 	vec3 pos;
 	vec3 rot;
 	vec3 scale;
-} recurse_state = {
+	unsigned int img;
+} static recurse_state = {
 	{
 		{ 1, 0, 0, 0 },
 		{ 0, 1, 0, 0 },
@@ -166,6 +195,450 @@ static void meshes_free_recursive(mesh_node_t * mesh);
 
 static int shaders_load(const char * vpath, const char * fpath, VkShaderModule * out_vertex, VkShaderModule * out_fragment);
 
+static int pipeline_create(void) {
+	VkViewport viewport = {
+		.x = 0,
+		.y = 0,
+		.width = state.vk.extent.width,
+		.height = state.vk.extent.height,
+		.minDepth = 0,
+		.maxDepth = 1,
+	};
+
+	VkRect2D scissor = {
+		.offset = {.x = 0, .y = 0 },
+		.extent = state.vk.extent,
+	};
+
+	VkPipelineShaderStageCreateInfo psscreate_infos[2] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.pNext = NULL,
+			.flags = 0,
+			.stage = VK_SHADER_STAGE_VERTEX_BIT,
+			.module = state.vk.shaders.vshader,
+			.pName = "main",
+			.pSpecializationInfo = NULL,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.pNext = NULL,
+			.flags = 0,
+			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.module = state.vk.shaders.fshader,
+			.pName = "main",
+			.pSpecializationInfo = NULL,
+		},
+	};
+
+	VkDynamicState dyn_states[2] = {
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR,
+	};
+
+	VkPipelineDynamicStateCreateInfo dyn_state_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.dynamicStateCount = 2,
+		.pDynamicStates = dyn_states,
+	};
+
+	VkVertexInputBindingDescription binding_desc = {
+		.binding = 0,
+		.stride = sizeof(kgfw_graphics_vertex_t),
+		.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+	};
+
+	VkVertexInputAttributeDescription attr_descs[4] = {
+		{
+			.binding = 0,
+			.location = 0,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = offsetof(kgfw_graphics_vertex_t, x),
+		},
+		{
+			.binding = 0,
+			.location = 1,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = offsetof(kgfw_graphics_vertex_t, r),
+		},
+		{
+			.binding = 0,
+			.location = 2,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = offsetof(kgfw_graphics_vertex_t, nx),
+		},
+		{
+			.binding = 0,
+			.location = 3,
+			.format = VK_FORMAT_R32G32_SFLOAT,
+			.offset = offsetof(kgfw_graphics_vertex_t, u),
+		}
+	};
+
+	VkPipelineVertexInputStateCreateInfo vcreate_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.vertexBindingDescriptionCount = 1,
+		.pVertexBindingDescriptions = &binding_desc,
+		.vertexAttributeDescriptionCount = 4,
+		.pVertexAttributeDescriptions = attr_descs,
+	};
+
+	VkPipelineInputAssemblyStateCreateInfo icreate_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+		.primitiveRestartEnable = VK_FALSE,
+	};
+
+	VkPipelineViewportStateCreateInfo vpcreate_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.viewportCount = 1,
+		.pViewports = &viewport,
+		.scissorCount = 1,
+		.pScissors = &scissor,
+	};
+
+	VkPipelineRasterizationStateCreateInfo rcreate_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.depthClampEnable = VK_FALSE,
+		.rasterizerDiscardEnable = VK_FALSE,
+		.polygonMode = VK_POLYGON_MODE_FILL,
+		.cullMode = VK_CULL_MODE_NONE,
+		.frontFace = VK_FRONT_FACE_CLOCKWISE,
+		.depthBiasEnable = VK_FALSE,
+		.depthBiasConstantFactor = 0,
+		.depthBiasClamp = 0,
+		.depthBiasSlopeFactor = 0,
+		.lineWidth = 1,
+	};
+
+	VkPipelineMultisampleStateCreateInfo mscreate_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+		.sampleShadingEnable = VK_FALSE,
+		.minSampleShading = 1.0f,
+		.pSampleMask = NULL,
+		.alphaToCoverageEnable = VK_FALSE,
+		.alphaToOneEnable = VK_FALSE,
+	};
+
+	VkPipelineColorBlendAttachmentState cba_state = {
+		.blendEnable = VK_TRUE,
+		.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+		.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+		.colorBlendOp = VK_BLEND_OP_ADD,
+		.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+		.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+		.alphaBlendOp = VK_BLEND_OP_ADD,
+		.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+	};
+
+	VkPipelineColorBlendStateCreateInfo cbcreate_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.logicOpEnable = VK_FALSE,
+		.logicOp = VK_LOGIC_OP_COPY,
+		.attachmentCount = 1,
+		.pAttachments = &cba_state,
+		.blendConstants = { 0, 0, 0, 0 },
+	};
+
+	VkPipelineLayoutCreateInfo plcreate_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.setLayoutCount = 1,
+		.pSetLayouts = &state.vk.pipeline.desc_layout,
+		.pushConstantRangeCount = 0,
+		.pPushConstantRanges = NULL,
+	};
+
+	VK_CHECK_DO_NO_SWAP(vkCreatePipelineLayout(state.vk.dev, &plcreate_info, state.vk.allocator, &state.vk.pipeline.layout), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan pipeline layout");
+		return 10;
+	});
+
+	VkGraphicsPipelineCreateInfo pcreate_info = {
+		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.stageCount = 2,
+		.pStages = psscreate_infos,
+		.pVertexInputState = &vcreate_info,
+		.pInputAssemblyState = &icreate_info,
+		.pTessellationState = NULL,
+		.pViewportState = &vpcreate_info,
+		.pRasterizationState = &rcreate_info,
+		.pMultisampleState = &mscreate_info,
+		.pDepthStencilState = NULL,
+		.pColorBlendState = &cbcreate_info,
+		.pDynamicState = &dyn_state_create_info,
+		.layout = state.vk.pipeline.layout,
+		.renderPass = state.vk.pipeline.render_pass,
+		.subpass = 0,
+		.basePipelineHandle = VK_NULL_HANDLE,
+		.basePipelineIndex = -1,
+	};
+
+	VK_CHECK_DO_NO_SWAP(vkCreateGraphicsPipelines(state.vk.dev, VK_NULL_HANDLE, 1, &pcreate_info, state.vk.allocator, &state.vk.pipeline.pipeline), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan graphics pipeline");
+		return 10;
+	});
+
+	return 0;
+}
+
+static void pipeline_destroy(void) {
+	vkDestroyPipeline(state.vk.dev, state.vk.pipeline.pipeline, state.vk.allocator);
+	vkDestroyPipelineLayout(state.vk.dev, state.vk.pipeline.layout, state.vk.allocator);
+}
+
+static int buffer_create(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer * out_buffer, VkDeviceMemory * out_memory) {
+	VkBufferCreateInfo create_info = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.size = size,
+		.usage = usage,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = 0,
+		.pQueueFamilyIndices = NULL,
+	};
+
+	VK_CHECK_DO_NO_SWAP(vkCreateBuffer(state.vk.dev, &create_info, state.vk.allocator, out_buffer), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan buffer");
+		return 1;
+	});
+
+	VkMemoryRequirements reqs;
+	vkGetBufferMemoryRequirements(state.vk.dev, *out_buffer, &reqs);
+	
+	VkPhysicalDeviceMemoryProperties props;
+	vkGetPhysicalDeviceMemoryProperties(state.vk.pdev, &props);
+	unsigned int index = 0;
+	for (index = 0; index < props.memoryTypeCount; ++index) {
+		if ((reqs.memoryTypeBits & (1 << index)) && (props.memoryTypes[index].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+			goto found;
+		}
+	}
+
+	kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to find appropriate Vulkan memory type");
+	return 2;
+found:;
+
+	VkMemoryAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.pNext = NULL,
+		.allocationSize = reqs.size,
+		.memoryTypeIndex = index,
+	};
+
+	VK_CHECK_DO_NO_SWAP(vkAllocateMemory(state.vk.dev, &alloc_info, state.vk.allocator, out_memory), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to allocate Vulkan memory");
+		return 3;
+	});
+
+	VK_CHECK_DO_NO_SWAP(vkBindBufferMemory(state.vk.dev, *out_buffer, *out_memory, 0), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to allocate Vulkan memory");
+		return 3;
+	});
+
+	return 0;
+}
+
+static void buffer_destroy(VkBuffer * buffer, VkDeviceMemory * memory) {
+	vkDestroyBuffer(state.vk.dev, *buffer, state.vk.allocator);
+	vkFreeMemory(state.vk.dev, *memory, state.vk.allocator);
+}
+
+static int buffer_copy(VkBuffer dst, VkBuffer src, VkDeviceSize size, VkDeviceSize offset) {
+	VkCommandBufferAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.pNext = NULL,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandPool = state.vk.cmd.pool,
+		.commandBufferCount = 1,
+	};
+
+	VkCommandBuffer cmd;
+	VK_CHECK_DO_NO_SWAP(vkAllocateCommandBuffers(state.vk.dev, &alloc_info, &cmd), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to allocate Vulkan command buffer");
+		return 1;
+	});
+
+	VkCommandBufferBeginInfo begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.pNext = NULL,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		.pInheritanceInfo = NULL,
+	};
+
+	VK_CHECK_DO_NO_SWAP(vkBeginCommandBuffer(cmd, &begin_info), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to begin command buffer");
+		return 2;
+	});
+
+	VkBufferCopy copy = {
+		.srcOffset = 0,
+		.dstOffset = 0,
+		.size = size,
+	};
+	vkCmdCopyBuffer(cmd, src, dst, 1, &copy);
+	vkEndCommandBuffer(cmd);
+
+	VkSubmitInfo submit_info = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &cmd,
+	};
+
+	vkQueueSubmit(state.vk.gfx_queue, 1, &submit_info, VK_NULL_HANDLE);
+	vkQueueWaitIdle(state.vk.gfx_queue);
+	vkFreeCommandBuffers(state.vk.dev, state.vk.cmd.pool, 1, &cmd);
+
+	return 0;
+}
+
+static int swapchain_create(void) {
+	VK_CHECK_DO_NO_SWAP(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(state.vk.pdev, state.vk.surface, &state.vk.capabilities), return 1);
+	state.vk.extent = state.vk.capabilities.currentExtent;
+
+	{
+		unsigned int image_count = (state.vk.capabilities.minImageCount + 1 > state.vk.capabilities.maxImageCount) ? state.vk.capabilities.maxImageCount : state.vk.capabilities.minImageCount + 1;
+		VkSwapchainCreateInfoKHR create_info = {
+			.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+			.pNext = NULL,
+			.flags = 0,
+			.surface = state.vk.surface,
+			.minImageCount = image_count,
+			.imageFormat = state.vk.surface_fmt.format,
+			.imageColorSpace = state.vk.surface_fmt.colorSpace,
+			.imageExtent = state.vk.extent,
+			.imageArrayLayers = 1,
+			.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+			.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+			.queueFamilyIndexCount = 0,
+			.pQueueFamilyIndices = NULL,
+			.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+			.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+			.presentMode = state.vk.present_mode,
+			.clipped = VK_FALSE,
+			.oldSwapchain = VK_NULL_HANDLE,
+		};
+
+		unsigned int indices[2] = { state.vk.queue_families.graphics, state.vk.queue_families.present };
+		if (state.vk.queue_families.graphics != state.vk.queue_families.present) {
+			create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+			create_info.queueFamilyIndexCount = 2;
+			create_info.pQueueFamilyIndices = indices;
+		}
+
+		VK_CHECK_DO_NO_SWAP(vkCreateSwapchainKHR(state.vk.dev, &create_info, state.vk.allocator, &state.vk.swapchain), {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan swapchain");
+			return 7;
+		});
+	}
+
+	{
+		VK_CHECK_DO_NO_SWAP(vkGetSwapchainImagesKHR(state.vk.dev, state.vk.swapchain, &state.vk.images.count, NULL), return 8);
+
+		state.vk.images.images = malloc(state.vk.images.count * sizeof(VkImage));
+		if (state.vk.images.images == NULL) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Allocation failure");
+			return 8;
+		}
+		VK_CHECK_DO_NO_SWAP(vkGetSwapchainImagesKHR(state.vk.dev, state.vk.swapchain, &state.vk.images.count, state.vk.images.images), return 8);
+
+		state.vk.images.views = malloc(state.vk.images.count * sizeof(VkImageView));
+		if (state.vk.images.views == NULL) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Allocation failure");
+			return 8;
+		}
+
+		for (unsigned int i = 0; i < state.vk.images.count; ++i) {
+			VkImageViewCreateInfo create_info = {
+				.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+				.pNext = NULL,
+				.flags = 0,
+				.image = state.vk.images.images[i],
+				.viewType = VK_IMAGE_VIEW_TYPE_2D,
+				.format = state.vk.surface_fmt.format,
+				.components = {
+					VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+				},
+				.subresourceRange = {
+					VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1,
+				},
+			};
+
+			VK_CHECK_DO_NO_SWAP(vkCreateImageView(state.vk.dev, &create_info, state.vk.allocator, &state.vk.images.views[i]), {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan image view");
+				return 8;
+			});
+		}
+	}
+
+	{
+		state.vk.images.framebuffers = malloc(state.vk.images.count * sizeof(VkFramebuffer));
+		if (state.vk.images.framebuffers == NULL) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Allocation failure");
+			return 11;
+		}
+
+		for (unsigned int i = 0; i < state.vk.images.count; ++i) {
+			VkFramebufferCreateInfo create_info = {
+				.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+				.pNext = NULL,
+				.flags = 0,
+				.renderPass = state.vk.pipeline.render_pass,
+				.attachmentCount = 1,
+				.pAttachments = &state.vk.images.views[i],
+				.width = state.vk.extent.width,
+				.height = state.vk.extent.height,
+				.layers = 1,
+			};
+
+			VK_CHECK_DO_NO_SWAP(vkCreateFramebuffer(state.vk.dev, &create_info, state.vk.allocator, &state.vk.images.framebuffers[i]), {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan framebuffer");
+				return 11;
+			});
+		}
+	}
+
+	return 0;
+}
+static int swapchain_destroy(void) {
+	vkDeviceWaitIdle(state.vk.dev);
+
+	for (unsigned int i = 0; i < state.vk.images.count; ++i) {
+		vkDestroyFramebuffer(state.vk.dev, state.vk.images.framebuffers[i], state.vk.allocator);
+		vkDestroyImageView(state.vk.dev, state.vk.images.views[i], state.vk.allocator);
+	}
+
+	free(state.vk.images.framebuffers);
+	state.vk.images.framebuffers = NULL;
+	free(state.vk.images.images);
+	state.vk.images.images = NULL;
+	free(state.vk.images.views);
+	state.vk.images.views = NULL;
+	vkDestroySwapchainKHR(state.vk.dev, state.vk.swapchain, state.vk.allocator);
+	state.vk.swapchain = NULL;
+
+	return 0;
+}
+
 #ifdef KGFW_DEBUG
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT * cdata, void * udata) {
@@ -179,12 +652,16 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(VkDebugUtilsMessageSever
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 			sev = KGFW_LOG_SEVERITY_ERROR;
+			debug_state.exit = 1;
 			break;
 	}
 
 	char * t = (type == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) ? "general" : (type == VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) ? "violation" : (type == VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) ? "performance" : "unknown";
 
 	kgfw_logf(sev, "Vulkan Debug log (type: %s): %s", t, cdata->pMessage);
+	if (severity == VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+		abort();
+	}
 	return VK_FALSE;
 }
 
@@ -192,9 +669,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(VkDebugUtilsMessageSever
 
 #define KGFW_VK_EXTEND(name) unsigned int extension_##name##_index = extensions_count + extra; ++extra;
 #define KGFW_VK_SET_EXTENSION(name) extensions[extension_##name##_index] = VK_##name##_EXTENSION_NAME;
-#define KGFW_VK_VERSION_MAJOR(version) (((version) >> 22U) & 0x3FF)
-#define KGFW_VK_VERSION_MINOR(version) (((version) >> 12U) & 0x3FF)
-#define KGFW_VK_VERSION_PATCH(version) (version & 0xFFF)
+#define KGFW_VK_VERSION_MAJOR(version) (((version) >> 22U) &0x3FF)
+#define KGFW_VK_VERSION_MINOR(version) (((version) >> 12U) &0x3FF)
+#define KGFW_VK_VERSION_PATCH(version) (version &0xFFF)
 #define KGFW_VULKAN_INFO
 
 int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
@@ -204,39 +681,9 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	state.camera = camera;
 
 	{
-		VkApplicationInfo app_info = {
-			VK_STRUCTURE_TYPE_APPLICATION_INFO,
-			NULL, "kgfw",
-			VK_MAKE_VERSION(1, 0, 0),
-			"kgfw",
-			VK_MAKE_VERSION(1, 0, 0),
-			VK_API_VERSION_1_0,
-		};
-
-		VkInstanceCreateInfo create_info = {
-			VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-			NULL, 0,
-			&app_info,
-			0, NULL,
-		};
-
 		unsigned int extensions_count = 0;
 		const char ** extensions = NULL;
 		{
-			unsigned int available_count = 0;
-			VkExtensionProperties * available = NULL;
-			vkEnumerateInstanceExtensionProperties(NULL, &available_count, NULL);
-
-			if (available_count > 0) {
-			available = malloc(available_count * sizeof(VkExtensionProperties));
-			if (available != NULL) {
-				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Allocation error");
-				return 1;
-			}
-
-			vkEnumerateInstanceExtensionProperties(NULL, &available_count, available);
-			}
-
 			const char ** ext = glfwGetRequiredInstanceExtensions(&extensions_count);
 			unsigned int extra = 0;
 
@@ -245,8 +692,6 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			#endif
 
 			#ifdef KGFW_APPLE_MACOS
-			unsigned int extension_KHR_PORTABILITY_SUBSET_index = extensions_count + extra; ++extra;
-			KGFW_VK_EXTEND(KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2);
 			KGFW_VK_EXTEND(KHR_PORTABILITY_ENUMERATION);
 			#endif
 
@@ -258,15 +703,13 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 			memcpy(extensions, ext, extensions_count * sizeof(char *));
 
-			#ifdef KGFW_DEBUG
-			KGFW_VK_SET_EXTENSION(EXT_DEBUG_UTILS);
-			#endif
-
 			#ifdef KGFW_APPLE_MACOS
-			extensions[extension_KHR_PORTABILITY_SUBSET_index] = "VK_KHR_portability_subset";
-			KGFW_VK_SET_EXTENSION(KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2);
 			KGFW_VK_SET_EXTENSION(KHR_PORTABILITY_ENUMERATION);
 			create_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+			#endif
+
+			#ifdef KGFW_DEBUG
+			KGFW_VK_SET_EXTENSION(EXT_DEBUG_UTILS);
 			#endif
 
 			extensions_count += extra;
@@ -277,6 +720,26 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			}
 			#endif
 		}
+
+		VkApplicationInfo app_info = {
+			.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+			.pNext = NULL,
+			.pApplicationName = "kgfw",
+			.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+			.pEngineName = "kgfw",
+			.engineVersion = VK_MAKE_VERSION(1, 0, 0),
+			.apiVersion = VK_API_VERSION_1_3,
+		};
+
+		VkInstanceCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+			.pNext = NULL, 0,
+			.pApplicationInfo = &app_info,
+			.enabledLayerCount = 0,
+			.ppEnabledLayerNames = NULL,
+			.enabledExtensionCount = 0,
+			.ppEnabledExtensionNames = NULL,
+		};
 
 		create_info.enabledExtensionCount = extensions_count;
 		create_info.ppEnabledExtensionNames = extensions;
@@ -323,10 +786,10 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		}
 		#endif
 
-		if (vkCreateInstance(&create_info, state.vk.allocator, &state.vk.instance) != VK_SUCCESS) {
+		VK_CHECK_DO_NO_SWAP(vkCreateInstance(&create_info, state.vk.allocator, &state.vk.instance), {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan instance");
 			return 1;
-		}
+		});
 
 		free(extensions);
 	}
@@ -334,19 +797,22 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	#ifdef KGFW_DEBUG
 	{
 		VkDebugUtilsMessengerCreateInfoEXT create_info = {
-			VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-			NULL, 0,
-			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-			vk_debug_callback,
-			NULL,
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+			.pNext = NULL,
+			.flags = 0,
+			.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+			.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+			.pfnUserCallback = vk_debug_callback,
+			.pUserData = NULL,
 		};
 
 		PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(state.vk.instance, "vkCreateDebugUtilsMessengerEXT");
 		if (vkCreateDebugUtilsMessengerEXT == NULL) {
 			kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "Failed to create Vulkan debug utilities messenger");
 		} else {
-			VK_CALL(vkCreateDebugUtilsMessengerEXT(state.vk.instance, &create_info, state.vk.allocator, &debug_state.messenger));
+			VK_CHECK_DO_NO_SWAP(vkCreateDebugUtilsMessengerEXT(state.vk.instance, &create_info, state.vk.allocator, &debug_state.messenger), {
+				kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "Failed to create Vulkan debug utilities messenger");
+			});
 		}
 	}
 	#endif
@@ -423,12 +889,26 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			VkBool32 present = 0;
 			VK_CALL(vkGetPhysicalDeviceSurfaceSupportKHR(state.vk.pdev, i, state.vk.surface, &present));
 
-			if (present) {
-				state.vk.queue_families.present = i;
-			}
+			#ifdef KGFW_VULKAN_INFO
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "Vulkan queue family %u:", i);
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    Queue count: %u", queue_families[i].queueCount);
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    Timestamp valid bits: %u", queue_families[i].timestampValidBits);
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    Min image transfer granularity: %ux%u", queue_families[i].minImageTransferGranularity.width, queue_families[i].minImageTransferGranularity.height);
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    Supported operations: %u", queue_families[i].queueFlags);
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    [%c] Present", (present) ? 'X' : ' ');
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    [%c] Graphics", (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) ? 'X' : ' ');
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    [%c] Transfer", (queue_families[i].queueFlags & VK_QUEUE_TRANSFER_BIT) ? 'X' : ' ');
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    [%c] Compute", (queue_families[i].queueFlags & VK_QUEUE_COMPUTE_BIT) ? 'X' : ' ');
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    [%c] Protected", (queue_families[i].queueFlags & VK_QUEUE_PROTECTED_BIT) ? 'X' : ' ');
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "    [%c] Sparse binding", (queue_families[i].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) ? 'X' : ' ');
+			#endif
 
 			if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 				state.vk.queue_families.graphics = i;
+			}
+
+			if (present) {
+				state.vk.queue_families.present = i;
 			}
 		}
 
@@ -510,30 +990,36 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		float priority = 1.0f;
 		VkDeviceQueueCreateInfo queue_create_infos[2] = {
 			{
-				VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-				NULL,
-				0,
-				state.vk.queue_families.graphics, 1,
-				&priority,
+				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+				.pNext = NULL,
+				.flags = 0,
+				.queueFamilyIndex = state.vk.queue_families.graphics,
+				.queueCount = 1,
+				.pQueuePriorities = &priority,
 			},
 			{
-				VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-				NULL,
-				0,
-				state.vk.queue_families.present, 1,
-				&priority,
+				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+				.pNext = NULL,
+				.flags = 0,
+				.queueFamilyIndex = state.vk.queue_families.present,
+				.queueCount = 1,
+				.pQueuePriorities = &priority,
 			},
 		};
 
 		VkPhysicalDeviceFeatures feats = { 0 };
 
 		VkDeviceCreateInfo create_info = {
-			VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-			NULL, 0,
-			2, queue_create_infos,
-			0, NULL,
-			0, NULL,
-			&feats,
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pNext = NULL,
+			.flags = 0,
+			.queueCreateInfoCount = 2,
+			.pQueueCreateInfos = queue_create_infos,
+			.enabledLayerCount = 0,
+			.ppEnabledLayerNames = NULL,
+			.enabledExtensionCount = 0,
+			.ppEnabledExtensionNames = NULL,
+			.pEnabledFeatures = &feats,
 		};
 
 		#ifdef KGFW_DEBUG
@@ -594,81 +1080,13 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			create_info.ppEnabledExtensionNames = required;
 		}
 
-		if (vkCreateDevice(state.vk.pdev, &create_info, state.vk.allocator, &state.vk.dev) != VK_SUCCESS) {
+		VK_CHECK_DO_NO_SWAP(vkCreateDevice(state.vk.pdev, &create_info, state.vk.allocator, &state.vk.dev), {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan device");
 			return 5;
-		}
+		});
 
 		vkGetDeviceQueue(state.vk.dev, state.vk.queue_families.graphics, 0, &state.vk.gfx_queue);
 		vkGetDeviceQueue(state.vk.dev, state.vk.queue_families.present, 0, &state.vk.pres_queue);
-	}
-
-	{
-		unsigned int image_count = (state.vk.capabilities.minImageCount + 1 > state.vk.capabilities.maxImageCount) ? state.vk.capabilities.maxImageCount : state.vk.capabilities.minImageCount + 1;
-		VkSwapchainCreateInfoKHR create_info = {
-			VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-			NULL, 0,
-			state.vk.surface,
-			image_count,
-			state.vk.surface_fmt.format, state.vk.surface_fmt.colorSpace,
-			state.vk.extent, 1,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-			VK_SHARING_MODE_EXCLUSIVE,
-			0, NULL,
-			VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
-			VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-			state.vk.present_mode,
-		};
-
-		unsigned int indices[2] = { state.vk.queue_families.graphics, state.vk.queue_families.present };
-		if (state.vk.queue_families.graphics != state.vk.queue_families.present) {
-			create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-			create_info.queueFamilyIndexCount = 2;
-			create_info.pQueueFamilyIndices = indices;
-		}
-
-		if (vkCreateSwapchainKHR(state.vk.dev, &create_info, state.vk.allocator, &state.vk.swapchain) != VK_SUCCESS) {
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan swapchain");
-			return 7;
-		}
-	}
-
-	{
-		vkGetSwapchainImagesKHR(state.vk.dev, state.vk.swapchain, &state.vk.images.count, NULL);
-
-		state.vk.images.images = malloc(state.vk.images.count * sizeof(VkImage));
-		if (state.vk.images.images == NULL) {
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Allocation failure");
-			return 8;
-		}
-		vkGetSwapchainImagesKHR(state.vk.dev, state.vk.swapchain, &state.vk.images.count, state.vk.images.images);
-
-		state.vk.images.views = malloc(state.vk.images.count * sizeof(VkImageView));
-		if (state.vk.images.views == NULL) {
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Allocation failure");
-			return 8;
-		}
-
-		for (unsigned int i = 0; i < state.vk.images.count; ++i) {
-			VkImageViewCreateInfo create_info = {
-				VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-				NULL, 0,
-				state.vk.images.images[i],
-				VK_IMAGE_VIEW_TYPE_2D,
-				state.vk.surface_fmt.format,
-				{
-					VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-				},
-				{
-					VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1,
-				},
-			};
-
-			if (vkCreateImageView(state.vk.dev, &create_info, state.vk.allocator, &state.vk.images.views[i]) != VK_SUCCESS) {
-				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan image view");
-				return 8;
-			}
-		}
 	}
 
 	int ret = shaders_load("assets/shaders/vertex.spv", "assets/shaders/fragment.spv", &state.vk.shaders.vshader, &state.vk.shaders.fshader);
@@ -679,276 +1097,259 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 	{
 		VkAttachmentDescription adesc = {
-			0,
-			state.vk.surface_fmt.format,
-			VK_SAMPLE_COUNT_1_BIT,
-			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
-			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+			.flags = 0,
+			.format = state.vk.surface_fmt.format,
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 		};
 
 		VkAttachmentReference aref = {
-			0,
-			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			.attachment = 0,
+			.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		};
 
 		VkSubpassDescription sdesc = {
-			0,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			0, NULL,
-			1, &aref,
-			NULL,
-			NULL,
-			0, NULL,
+			.flags = 0,
+			.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+			.inputAttachmentCount = 0,
+			.pInputAttachments = NULL,
+			.colorAttachmentCount = 1,
+			.pColorAttachments = &aref,
+			.pResolveAttachments = NULL,
+			.pDepthStencilAttachment = NULL,
+			.preserveAttachmentCount = 0,
+			.pPreserveAttachments = NULL,
+		};
+
+		VkSubpassDependency dep = {
+			.srcSubpass = VK_SUBPASS_EXTERNAL,
+			.dstSubpass = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcAccessMask = 0,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			.dependencyFlags = 0,
 		};
 
 		VkRenderPassCreateInfo create_info = {
-			VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			NULL, 0,
-			1, &adesc,
-			1, &sdesc,
-			0, NULL,
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			.pNext = NULL,
+			.flags = 0,
+			.attachmentCount = 1,
+			.pAttachments = &adesc,
+			.subpassCount = 1,
+			.pSubpasses = &sdesc,
+			.dependencyCount = 1,
+			.pDependencies = &dep,
 		};
 
-		if (vkCreateRenderPass(state.vk.dev, &create_info, state.vk.allocator, &state.vk.pipeline.render_pass) != VK_SUCCESS) {
+		VK_CHECK_DO_NO_SWAP(vkCreateRenderPass(state.vk.dev, &create_info, state.vk.allocator, &state.vk.pipeline.render_pass), {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan render pass");
 			return 10;
-		}
+		});
 	}
 
-	VkViewport viewport = {
-		0, 0,
-		state.vk.extent.width, state.vk.extent.height,
-		0, 1,
-	};
+	{
+		VkDescriptorSetLayoutBinding layout_binding = {
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+			.pImmutableSamplers = NULL,
+		};
 
-	VkRect2D scissor = {
-		{ 0, 0 },
-		state.vk.extent,
-	};
+		VkDescriptorSetLayoutCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.pNext = NULL,
+			.flags = 0,
+			.bindingCount = 1,
+			.pBindings = &layout_binding,
+		};
+
+		VK_CHECK_DO_NO_SWAP(vkCreateDescriptorSetLayout(state.vk.dev, &create_info, state.vk.allocator, &state.vk.pipeline.desc_layout), {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan descriptor set layout");
+			return 10;
+		});
+	}
 
 	{
-		VkPipelineShaderStageCreateInfo psscreate_infos[2] = {
-			{
-				VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-				NULL, 0,
-				VK_SHADER_STAGE_VERTEX_BIT,
-				state.vk.shaders.vshader,
-				"main",
-				NULL,
-			},
-			{
-				VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-				NULL, 0,
-				VK_SHADER_STAGE_FRAGMENT_BIT,
-				state.vk.shaders.fshader,
-				"main",
-				NULL,
-			},
-		};
-
-		VkDynamicState dyn_states[2] = {
-			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR,
-		};
-
-		VkPipelineDynamicStateCreateInfo dyn_state_create_info = {
-			VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-			NULL, 0,
-			2, dyn_states,
-		};
-
-		VkPipelineVertexInputStateCreateInfo vcreate_info = {
-			VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			NULL, 0,
-			0, NULL,
-			0, NULL,
-		};
-
-		VkPipelineInputAssemblyStateCreateInfo icreate_info = {
-			VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-			NULL, 0,
-				VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-				VK_FALSE,
-		};
-
-		VkPipelineViewportStateCreateInfo vpcreate_info = {
-			VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-			NULL, 0,
-			1, &viewport,
-			1, &scissor,
-		};
-
-		VkPipelineRasterizationStateCreateInfo rcreate_info = {
-			VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-			NULL, 0,
-			VK_FALSE,
-			VK_FALSE,
-			VK_POLYGON_MODE_FILL,
-			VK_CULL_MODE_NONE,
-			VK_FRONT_FACE_CLOCKWISE,
-			VK_FALSE,
-			0, 0, 0, 1,
-		};
-
-		VkPipelineMultisampleStateCreateInfo mscreate_info = {
-			VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-			NULL, 0,
-			VK_SAMPLE_COUNT_1_BIT,
-			VK_FALSE,
-			1.0f,
-			NULL,
-			VK_FALSE,
-			VK_FALSE,
-		};
-
-		VkPipelineColorBlendAttachmentState cba_state = {
-			VK_TRUE,
-			VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_OP_ADD,
-			VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD,
-			VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-		};
-
-		VkPipelineColorBlendStateCreateInfo cbcreate_info = {
-			VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-			NULL, 0,
-			VK_FALSE,
-			VK_LOGIC_OP_COPY,
-			1, &cba_state,
-			{ 0, 0, 0, 0 },
-		};
-
-		VkPipelineLayoutCreateInfo plcreate_info = {
-			VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-			NULL, 0,
-			0, NULL,
-			0, NULL,
-		};
-
-		if (vkCreatePipelineLayout(state.vk.dev, &plcreate_info, state.vk.allocator, &state.vk.pipeline.layout) != VK_SUCCESS) {
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan pipeline layout");
-			return 10;
-		}
-
-		VkGraphicsPipelineCreateInfo pcreate_info = {
-			VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-			NULL, 0,
-			2, psscreate_infos,
-			&vcreate_info,
-			&icreate_info,
-			NULL,
-			&vpcreate_info,
-			&rcreate_info,
-			&mscreate_info,
-			NULL,
-			&cbcreate_info,
-			&dyn_state_create_info,
-			state.vk.pipeline.layout,
-			state.vk.pipeline.render_pass,
-			0,
-			VK_NULL_HANDLE,
-			-1,
-		};
-
-		if (vkCreateGraphicsPipelines(state.vk.dev, VK_NULL_HANDLE, 1, &pcreate_info, state.vk.allocator, &state.vk.pipeline.pipeline) != VK_SUCCESS) {
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan graphics pipeline");
-			return 10;
+		int r = pipeline_create();
+		if (r != 0) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan pipeline");
+			return r;
 		}
 	}
 
 	{
-		state.vk.images.framebuffers = malloc(state.vk.images.count * sizeof(VkFramebuffer));
-		if (state.vk.images.framebuffers == NULL) {
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Allocation failure");
-			return 11;
-		}
-
-		for (unsigned int i = 0; i < state.vk.images.count; ++i) {
-			VkFramebufferCreateInfo create_info = {
-				VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-				NULL, 0,
-				state.vk.pipeline.render_pass,
-				1, &state.vk.images.views[i],
-				state.vk.extent.width, state.vk.extent.height,
-				1,
-			};
-
-			if (vkCreateFramebuffer(state.vk.dev, &create_info, state.vk.allocator, &state.vk.images.framebuffers[i]) != VK_SUCCESS) {
-				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan framebuffer");
-				return 11;
-			}
+		int r = swapchain_create();
+		if (r != 0) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan swapchain");
+			return r;
 		}
 	}
 
 	{
 		VkCommandPoolCreateInfo create_info = {
-			VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-			NULL, 0,
-			state.vk.queue_families.graphics,
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.pNext = NULL,
+			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+			.queueFamilyIndex = state.vk.queue_families.graphics,
 		};
 
-		if (vkCreateCommandPool(state.vk.dev, &create_info, state.vk.allocator, &state.vk.cmd.pool) != VK_SUCCESS) {
+		VK_CHECK_DO_NO_SWAP(vkCreateCommandPool(state.vk.dev, &create_info, state.vk.allocator, &state.vk.cmd.pool), {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan command pool");
 			return 12;
-		}
+		});
 
 		VkCommandBufferAllocateInfo alloc_info = {
-			VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			NULL,
-			state.vk.cmd.pool,
-			VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			1,
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.pNext = NULL,
+			.commandPool = state.vk.cmd.pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1,
 		};
 
-		if (vkAllocateCommandBuffers(state.vk.dev, &alloc_info, &state.vk.cmd.buffer) != VK_SUCCESS) {
+		VK_CHECK_DO_NO_SWAP(vkAllocateCommandBuffers(state.vk.dev, &alloc_info, &state.vk.cmd.buffer), {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to allocate Vulkan command buffer");
 			return 12;
-		}
-
-		VkCommandBufferBeginInfo begin_info = {
-			VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			NULL, 0,
-			NULL,
-		};
-
-		if (vkBeginCommandBuffer(state.vk.cmd.buffer, &begin_info) != VK_SUCCESS) {
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to begin Vulkan command buffer");
-			return 12;
-		}
+		});
 	}
 
 	{
-		VkClearValue color = { { { 0.57f, 0.59f, 0.58f, 1.0f } } };
-
-		VkRenderPassBeginInfo begin_info = {
-			VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			NULL,
-			state.vk.pipeline.render_pass,
-			state.vk.images.framebuffers[0],
-			{
-				{ 0, 0 },
-				state.vk.extent,
-			},
-			1, &color,
+		VkSemaphoreCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+			.pNext = NULL,
+			.flags = 0,
 		};
 
-		vkCmdBeginRenderPass(state.vk.cmd.buffer, &begin_info, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdBindPipeline(state.vk.cmd.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state.vk.pipeline.pipeline);
-		vkCmdSetViewport(state.vk.cmd.buffer, 0, 1, &viewport);
-		vkCmdSetScissor(state.vk.cmd.buffer, 0, 1, &scissor);
-		vkCmdDraw(state.vk.cmd.buffer, 3, 1, 0, 0);
-		vkCmdEndRenderPass(state.vk.cmd.buffer);
-		if (vkEndCommandBuffer(state.vk.cmd.buffer) != VK_SUCCESS) {
-			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to end Vulkan command buffer");
-			return 12;
-		}
+		VK_CHECK_DO_NO_SWAP(vkCreateSemaphore(state.vk.dev, &create_info, state.vk.allocator, &state.vk.sync.image_available), {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan semaphore");
+			return 13;
+		});
+
+		VK_CHECK_DO_NO_SWAP(vkCreateSemaphore(state.vk.dev, &create_info, state.vk.allocator, &state.vk.sync.render_finished), {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan semaphore");
+			return 13;
+		});
 	}
 
-	/*state.program = GL_CALL(glCreateProgram());
-	int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
-	if (r != 0) {
-		return r;
-	}*/
+	{
+		VkFenceCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+			.pNext = NULL,
+			.flags = VK_FENCE_CREATE_SIGNALED_BIT,
+		};
+
+		VK_CHECK_DO_NO_SWAP(vkCreateFence(state.vk.dev, &create_info, state.vk.allocator, &state.vk.sync.in_flight), {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan fence");
+			return 14;
+		});
+	}
+
+	{
+		kgfw_graphics_vertex_t vertices[] = {
+			{
+				-1, -1, 0,
+				1, 1, 0,
+				0, 0, 0,
+				0, 0,
+			},
+			{
+				-1, 1, 0,
+				0, 1, 1,
+				0, 0, 0,
+				0, 0,
+			},
+			{
+				1, -1, 0,
+				1, 0, 1,
+				0, 0, 0,
+				0, 0,
+			},
+			{
+				1, 1, 0,
+				1, 1, 1,
+				0, 0, 0,
+				0, 0,
+			}
+		};
+
+		unsigned int indices[] = {
+			0, 1, 2,
+			1, 3, 2,
+		};
+
+		{
+			if (buffer_create(sizeof(vk_ubo_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &state.vk.ubo, &state.vk.umem) != 0) {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan uniform buffer");
+				return 15;
+			}
+
+			vkMapMemory(state.vk.dev, state.vk.umem, 0, sizeof(vk_ubo_t), 0, &state.vk.ubomap);
+		}
+
+		{
+			VkDescriptorPoolSize pool_size = {
+				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+			};
+
+			VkDescriptorPoolCreateInfo create_info = {
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+				.pNext = NULL,
+				.flags = 0,
+				.maxSets = 1,
+				.poolSizeCount = 1,
+				.pPoolSizes = &pool_size,
+			};
+
+			VK_CHECK_DO_NO_SWAP(vkCreateDescriptorPool(state.vk.dev, &create_info, state.vk.allocator, &state.vk.pipeline.desc_pool), {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan descriptor pool");
+				return 15;
+				});
+		}
+
+		{
+			VkDescriptorSetAllocateInfo alloc_info = {
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.pNext = NULL,
+				.descriptorPool = state.vk.pipeline.desc_pool,
+				.descriptorSetCount = 1,
+				.pSetLayouts = &state.vk.pipeline.desc_layout,
+			};
+
+			VK_CHECK_DO_NO_SWAP(vkAllocateDescriptorSets(state.vk.dev, &alloc_info, &state.vk.pipeline.desc_set), {
+				kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to allocate Vulkan descriptor set");
+				return 16;
+				});
+
+			VkDescriptorBufferInfo buffer_info = {
+				.buffer = state.vk.ubo,
+				.offset = 0,
+				.range = sizeof(vk_ubo_t),
+			};
+
+			VkWriteDescriptorSet write = {
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.pNext = NULL,
+				.dstSet = state.vk.pipeline.desc_set,
+				.dstBinding = 0,
+				.dstArrayElement = 0,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.pImageInfo = NULL,
+				.pBufferInfo = &buffer_info,
+				.pTexelBufferView = NULL,
+			};
+
+			vkUpdateDescriptorSets(state.vk.dev, 1, &write, 0, NULL);
+		}
+	}
 
 	update_settings(state.settings);
 
@@ -956,29 +1357,29 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 }
 
 void kgfw_graphics_deinit(void) {
+	vkDeviceWaitIdle(state.vk.dev);
+
 	meshes_free_recursive_fchild(state.mesh_root);
+
+	buffer_destroy(&state.vk.ubo, &state.vk.umem);
+
+	vkDestroyFence(state.vk.dev, state.vk.sync.in_flight, state.vk.allocator);
+	vkDestroySemaphore(state.vk.dev, state.vk.sync.render_finished, state.vk.allocator);
+	vkDestroySemaphore(state.vk.dev, state.vk.sync.image_available, state.vk.allocator);
 
 	vkDestroyCommandPool(state.vk.dev, state.vk.cmd.pool, state.vk.allocator);
 
-	for (unsigned int i = 0; i < state.vk.images.count; ++i) {
-		vkDestroyFramebuffer(state.vk.dev, state.vk.images.framebuffers[i], state.vk.allocator);
-	}
-	free(state.vk.images.framebuffers);
+	swapchain_destroy();
+	pipeline_destroy();
 
-	vkDestroyPipeline(state.vk.dev, state.vk.pipeline.pipeline, state.vk.allocator);
-	vkDestroyPipelineLayout(state.vk.dev, state.vk.pipeline.layout, state.vk.allocator);
+	vkDestroyDescriptorPool(state.vk.dev, state.vk.pipeline.desc_pool, state.vk.allocator);
+	vkDestroyDescriptorSetLayout(state.vk.dev, state.vk.pipeline.desc_layout, state.vk.allocator);
+
 	vkDestroyRenderPass(state.vk.dev, state.vk.pipeline.render_pass, state.vk.allocator);
 
 	vkDestroyShaderModule(state.vk.dev, state.vk.shaders.vshader, state.vk.allocator);
 	vkDestroyShaderModule(state.vk.dev, state.vk.shaders.fshader, state.vk.allocator);
 
-	for (unsigned int i = 0; i < state.vk.images.count; ++i) {
-		vkDestroyImageView(state.vk.dev, state.vk.images.views[i], state.vk.allocator);
-	}
-	free(state.vk.images.views);
-	free(state.vk.images.images);
-
-	vkDestroySwapchainKHR(state.vk.dev, state.vk.swapchain, state.vk.allocator);
 	vkDestroyDevice(state.vk.dev, state.vk.allocator);
 	vkDestroySurfaceKHR(state.vk.instance, state.vk.surface, state.vk.allocator);
 
@@ -992,7 +1393,13 @@ void kgfw_graphics_deinit(void) {
 	vkDestroyInstance(state.vk.instance, state.vk.allocator);
 }
 
-void kgfw_graphics_draw(void) {
+int kgfw_graphics_draw(void) {
+	#ifdef KGFW_DEBUG
+	if (debug_state.exit) {
+		return -1;
+	}
+	#endif
+
 	mat4x4 mvp;
 	mat4x4 m;
 	mat4x4 v;
@@ -1007,11 +1414,99 @@ void kgfw_graphics_draw(void) {
 	kgfw_camera_view(state.camera, v);
 	kgfw_camera_perspective(state.camera, p);
 
+	p[1][1] *= -1;
 	mat4x4_mul(state.vp, p, v);
 
 	state.light.pos[0] = sinf(kgfw_time_get() * 2) * 10;
 	state.light.pos[1] = cosf(kgfw_time_get() / 6) * 15;
 	state.light.pos[2] = sinf(kgfw_time_get() + 3) * 10;
+
+	VK_CHECK_DO(vkWaitForFences(state.vk.dev, 1, &state.vk.sync.in_flight, VK_TRUE, UINT64_MAX), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to wait for Vulkan fence");
+		return 1;
+	});
+
+	VK_CHECK_DO(vkResetFences(state.vk.dev, 1, &state.vk.sync.in_flight), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to reset Vulkan fence");
+		return 1;
+	});
+
+	VK_CHECK_DO(vkResetCommandBuffer(state.vk.cmd.buffer, 0), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to reset Vulkan command buffer");
+		return 1;
+	});
+
+	{
+		VkCommandBufferBeginInfo cbbegin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.pNext = NULL,
+			.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+			.pInheritanceInfo = NULL,
+		};
+
+		VK_CHECK_DO(vkBeginCommandBuffer(state.vk.cmd.buffer, &cbbegin_info), {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to begin Vulkan command buffer");
+			return 1;
+		});
+	}
+
+	unsigned int img;
+	VK_CHECK_DO(vkAcquireNextImageKHR(state.vk.dev, state.vk.swapchain, UINT64_MAX, state.vk.sync.image_available, VK_NULL_HANDLE, &img), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to acquire next Vulkan swapchain image");
+		return 2;
+	});
+	recurse_state.img = img;
+
+	VkImageMemoryBarrier barrier = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+		.pNext = NULL,
+		.srcAccessMask = 0,
+		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = state.vk.images.images[img],
+		.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+	};
+
+	vkCmdPipelineBarrier(state.vk.cmd.buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+
+	state.vk.viewport.x = 0;
+	state.vk.viewport.y = 0;
+	state.vk.viewport.width = state.vk.extent.width;
+	state.vk.viewport.height = state.vk.extent.height;
+	state.vk.viewport.minDepth = 0;
+	state.vk.viewport.maxDepth = 1;
+
+	state.vk.scissor.offset = (VkOffset2D){ 0, 0 };
+	state.vk.scissor.extent = state.vk.extent;
+
+	VkClearValue color = {
+		.color = {
+			.float32 = {
+				0.57f, 0.59f, 0.58f, 1.0f
+			}
+		}
+	};
+
+	VkRenderPassBeginInfo begin_info = {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+		.pNext = NULL,
+		.renderPass = state.vk.pipeline.render_pass,
+		.framebuffer = state.vk.images.framebuffers[recurse_state.img],
+		.renderArea = {
+			.offset = { 0, 0 },
+			.extent = state.vk.extent,
+		},
+		.clearValueCount = 1,
+		.pClearValues = &color,
+	};
+
+	vkCmdBeginRenderPass(state.vk.cmd.buffer, &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBindPipeline(state.vk.cmd.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state.vk.pipeline.pipeline);
+	vkCmdBindDescriptorSets(state.vk.cmd.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state.vk.pipeline.layout, 0, 1, &state.vk.pipeline.desc_set, 0, NULL);
+
 	if (state.mesh_root != NULL) {
 		mat4x4_identity(recurse_state.model);
 
@@ -1027,6 +1522,53 @@ void kgfw_graphics_draw(void) {
 
 		meshes_draw_recursive_fchild(state.mesh_root);
 	}
+
+	vkCmdEndRenderPass(state.vk.cmd.buffer);
+
+	VK_CHECK_DO(vkEndCommandBuffer(state.vk.cmd.buffer), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to end Vulkan command buffer");
+		return 1;
+	});
+
+	{
+		VkPipelineStageFlags psflags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+		VkSubmitInfo submit_info = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.pNext = NULL,
+			.waitSemaphoreCount = 1,
+			.pWaitSemaphores = &state.vk.sync.image_available,
+			.pWaitDstStageMask = &psflags,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &state.vk.cmd.buffer,
+			.signalSemaphoreCount = 1,
+			.pSignalSemaphores = &state.vk.sync.render_finished,
+		};
+
+		VK_CHECK_DO(vkQueueSubmit(state.vk.gfx_queue, 1, &submit_info, state.vk.sync.in_flight), {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to submit Vulkan queue");
+			return 2;
+		});
+
+		VkResult result = VK_SUCCESS;
+		VkPresentInfoKHR present_info = {
+			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+			.pNext = NULL,
+			.waitSemaphoreCount = 1,
+			.pWaitSemaphores = &state.vk.sync.render_finished,
+			.swapchainCount = 1,
+			.pSwapchains = &state.vk.swapchain,
+			.pImageIndices = &img,
+			.pResults = &result,
+		};
+
+		VK_CHECK_DO(vkQueuePresentKHR(state.vk.pres_queue, &present_info), {
+			return 3;
+		});
+		VK_CHECK_DO(result, return 3);
+	}
+
+	return 0;
 }
 
 void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture, kgfw_graphics_texture_use_enum use) {
@@ -1045,6 +1587,57 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 	memcpy(node->transform.pos, mesh->pos, sizeof(vec3));
 	memcpy(node->transform.rot, mesh->rot, sizeof(vec3));
 	memcpy(node->transform.scale, mesh->scale, sizeof(vec3));
+	
+	{
+		VkBuffer staging;
+		VkDeviceMemory staging_mem;
+		node->vk.vbo_size = mesh->vertices_count;
+		node->vk.ibo_size = mesh->indices_count;
+		VkDeviceSize vsize = sizeof(kgfw_graphics_vertex_t) * node->vk.vbo_size;
+		VkDeviceSize isize = sizeof(unsigned int) * node->vk.ibo_size;
+		if (buffer_create(vsize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging, &staging_mem) != 0) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan staging buffer");
+			return 15;
+		}
+
+		void * data;
+		vkMapMemory(state.vk.dev, staging_mem, 0, vsize, 0, &data);
+		memcpy(data, mesh->vertices, vsize);
+		vkUnmapMemory(state.vk.dev, staging_mem);
+
+		if (buffer_create(vsize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &node->vk.vbuf, &node->vk.vmem) != 0) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan vertex buffer");
+			return 15;
+		}
+
+		if (buffer_copy(node->vk.vbuf, staging, vsize, 0) != 0) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to copy Vulkan staging buffer to mesh buffer");
+			return 15;
+		}
+
+		buffer_destroy(&staging, &staging_mem);
+
+		if (buffer_create(isize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging, &staging_mem) != 0) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan staging buffer");
+			return 15;
+		}
+
+		vkMapMemory(state.vk.dev, staging_mem, 0, isize, 0, &data);
+		memcpy(data, mesh->indices, isize);
+		vkUnmapMemory(state.vk.dev, staging_mem);
+
+		if (buffer_create(isize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &node->vk.ibuf, &node->vk.imem) != 0) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan vertex buffer");
+			return 15;
+		}
+
+		if (buffer_copy(node->vk.ibuf, staging, isize, 0) != 0) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to copy Vulkan staging buffer to index buffer");
+			return 15;
+		}
+
+		buffer_destroy(&staging, &staging_mem);
+	}
 
 	if (parent == NULL) {
 		if (state.mesh_root == NULL) {
@@ -1107,7 +1700,15 @@ void kgfw_graphics_set_window(kgfw_window_t * window) {
 }
 
 void kgfw_graphics_viewport(unsigned int width, unsigned int height) {
-
+	int w = 0;
+	int h = 0;
+	glfwGetFramebufferSize(state.window->internal, &w, &h);
+	while (w == 0 || h == 0) {
+		glfwGetFramebufferSize(state.window->internal, &w, &h);
+		glfwWaitEvents();
+	}
+	vkDeviceWaitIdle(state.vk.dev);
+	VK_SWAPCHAIN_RESIZE();
 }
 
 kgfw_window_t * kgfw_graphics_get_window(void) {
@@ -1132,13 +1733,10 @@ static void meshes_free(mesh_node_t * node) {
 		return;
 	}
 
-
+	buffer_destroy(&node->vk.vbuf, &node->vk.vmem);
+	buffer_destroy(&node->vk.ibuf, &node->vk.imem);
 
 	free(node);
-}
-
-static void meshes_gen(mesh_node_t * node) {
-
 }
 
 static mesh_node_t * meshes_new(void) {
@@ -1147,7 +1745,6 @@ static mesh_node_t * meshes_new(void) {
 		return NULL;
 	}
 
-	meshes_gen(m);
 	return m;
 }
 
@@ -1193,12 +1790,21 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 		return;
 	}
 
-
-
 	mat4x4_identity(out_m);
 	mesh_transform(mesh, out_m);
 
+	vk_ubo_t ubo;
+	mat4x4_mul(ubo.mvp, state.vp, out_m);
+	memcpy(state.vk.ubomap, &ubo, sizeof(vk_ubo_t));
 
+	{
+		VkDeviceSize offset = 0;
+		vkCmdBindVertexBuffers(state.vk.cmd.buffer, 0, 1, &mesh->vk.vbuf, &offset);
+		vkCmdBindIndexBuffer(state.vk.cmd.buffer, mesh->vk.ibuf, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdSetViewport(state.vk.cmd.buffer, 0, 1, &state.vk.viewport);
+		vkCmdSetScissor(state.vk.cmd.buffer, 0, 1, &state.vk.scissor);
+		vkCmdDrawIndexed(state.vk.cmd.buffer, 6, 1, 0, 0, 0);
+	}
 }
 
 static void meshes_draw_recursive(mesh_node_t * mesh) {
@@ -1245,11 +1851,10 @@ static void meshes_free_recursive(mesh_node_t * mesh) {
 		return;
 	}
 
-	if (mesh->child == NULL) {
-		return;
+	if (mesh->child != NULL) {
+		meshes_free_recursive_fchild(mesh->child);
 	}
 
-	meshes_free_recursive_fchild(mesh->child);
 	meshes_free(mesh);
 }
 
@@ -1258,15 +1863,17 @@ static void meshes_free_recursive_fchild(mesh_node_t * mesh) {
 		return;
 	}
 
-	meshes_free_recursive(mesh);
+	mesh_node_t * sibling = mesh->sibling;
 	for (mesh_node_t * m = mesh;;) {
-		m = m->sibling;
+		m = sibling;
 		if (m == NULL) {
 			break;
 		}
+		sibling = m->sibling;
 
 		meshes_free_recursive(m);
 	}
+	meshes_free_recursive(mesh);
 }
 
 void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsigned int settings) {
@@ -1274,7 +1881,7 @@ void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsig
 
 	switch (action) {
 	case KGFW_GRAPHICS_SETTINGS_ACTION_SET:
-		change = state.settings & ~settings;
+		change = state.settings &~settings;
 		state.settings = settings;
 		break;
 	case KGFW_GRAPHICS_SETTINGS_ACTION_ENABLE:
@@ -1320,12 +1927,13 @@ static int gfx_command(int argc, char ** argv) {
 		}
 
 		if (strcmp("shaders", argv[2]) == 0) {
-			/*GL_CALL(glDeleteProgram(state.program));
-			state.program = GL_CALL(glCreateProgram());
-			int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
-			if (r != 0) {
-				return r;
-			}*/
+			vkDestroyShaderModule(state.vk.dev, state.vk.shaders.vshader, state.vk.allocator);
+			vkDestroyShaderModule(state.vk.dev, state.vk.shaders.fshader, state.vk.allocator);
+			shaders_load("assets/shaders/vertex.spv", "assets/shaders/fragment.spv", &state.vk.shaders.vshader, &state.vk.shaders.fshader);
+
+			vkDeviceWaitIdle(state.vk.dev);
+			pipeline_destroy();
+			pipeline_create();
 			return 0;
 		}
 
@@ -1429,9 +2037,11 @@ static int shaders_load(const char * vpath, const char * fpath, VkShaderModule *
 	}
 
 	VkShaderModuleCreateInfo create_info = {
-		VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		NULL, 0,
-		vlen, vshader,
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.codeSize = vlen,
+		.pCode = vshader,
 	};
 
 	VkShaderModule mod;
@@ -1556,7 +2166,7 @@ struct {
 	vec3 pos;
 	vec3 rot;
 	vec3 scale;
-} recurse_state = {
+} static recurse_state = {
 	{
 		{ 1, 0, 0, 0 },
 		{ 0, 1, 0, 0 },
@@ -1584,7 +2194,7 @@ void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsig
 
 	switch (action) {
 	case KGFW_GRAPHICS_SETTINGS_ACTION_SET:
-		change = state.settings & ~settings;
+		change = state.settings &~settings;
 		state.settings = settings;
 		break;
 	case KGFW_GRAPHICS_SETTINGS_ACTION_ENABLE:
@@ -1631,7 +2241,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	}
 
 	state.program = GL_CALL(glCreateProgram());
-	int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
+	int r = shaders_load("assets/shaders/shader.vert", "assets/shaders/shader.frag", &state.program);
 	if (r != 0) {
 		return r;
 	}
@@ -1648,7 +2258,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	return 0;
 }
 
-void kgfw_graphics_draw(void) {
+int kgfw_graphics_draw(void) {
 	GL_CALL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 	GL_CALL(glClearColor(0.57f, 0.59f, 0.58f, 1.0f));
 
@@ -1668,9 +2278,6 @@ void kgfw_graphics_draw(void) {
 
 	mat4x4_mul(state.vp, p, v);
 
-	state.light.pos[0] = sinf(kgfw_time_get() * 2) * 10;
-	state.light.pos[1] = cosf(kgfw_time_get() / 6) * 15;
-	state.light.pos[2] = sinf(kgfw_time_get() + 3) * 10;
 	if (state.mesh_root != NULL) {
 		mat4x4_identity(recurse_state.model);
 
@@ -1686,6 +2293,8 @@ void kgfw_graphics_draw(void) {
 
 		meshes_draw_recursive_fchild(state.mesh_root);
 	}
+
+	return 0;
 }
 
 void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture, kgfw_graphics_texture_use_enum use) {
@@ -2017,11 +2626,10 @@ static void meshes_free_recursive(mesh_node_t * mesh) {
 		return;
 	}
 
-	if (mesh->child == NULL) {
-		return;
+	if (mesh->child != NULL) {
+		meshes_free_recursive_fchild(mesh->child);
 	}
 
-	meshes_free_recursive_fchild(mesh->child);
 	meshes_free(mesh);
 }
 
@@ -2030,21 +2638,23 @@ static void meshes_free_recursive_fchild(mesh_node_t * mesh) {
 		return;
 	}
 
-	meshes_free_recursive(mesh);
+	mesh_node_t * sibling = mesh->sibling;
 	for (mesh_node_t * m = mesh;;) {
-		m = m->sibling;
+		m = sibling;
 		if (m == NULL) {
 			break;
 		}
+		sibling = m->sibling;
 
 		meshes_free_recursive(m);
 	}
+	meshes_free_recursive(mesh);
 }
 
 static void update_settings(unsigned int change) {
-	if (change & KGFW_GRAPHICS_SETTINGS_VSYNC) {
+	if (change &KGFW_GRAPHICS_SETTINGS_VSYNC) {
 		if (state.window != NULL) {
-			glfwSwapInterval((state.settings & KGFW_GRAPHICS_SETTINGS_VSYNC));
+			glfwSwapInterval((state.settings &KGFW_GRAPHICS_SETTINGS_VSYNC));
 		}
 	}
 }
@@ -2067,7 +2677,7 @@ static int gfx_command(int argc, char ** argv) {
 		if (strcmp("shaders", argv[2]) == 0) {
 			GL_CALL(glDeleteProgram(state.program));
 			state.program = GL_CALL(glCreateProgram());
-			int r = shaders_load("assets/shaders/vertex.glsl", "assets/shaders/fragment.glsl", &state.program);
+			int r = shaders_load("assets/shaders/shader.vert", "assets/shaders/shader.frag", &state.program);
 			if (r != 0) {
 				return r;
 			}
@@ -2146,7 +2756,7 @@ static int shaders_load(const char * vpath, const char * fpath, GLuint * out_pro
 		FILE * fp = fopen(vpath, "rb");
 		unsigned long long int length = 0;
 		if (fp == NULL) {
-			kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load vertex shader from \"assets/shaders/vertex.glsl\" falling back to default shader");
+			kgfw_logf(KGFW_LOG_SEVERITY_WARN, "failed to load vertex shader from \"assets/shaders/shader.vert\" falling back to default shader");
 			vshader = (GLchar *) fallback_vshader;
 			goto load_fshader;
 		}
@@ -2378,7 +2988,7 @@ struct {
 	vec3 pos;
 	vec3 rot;
 	vec3 scale;
-} recurse_state = {
+} static recurse_state = {
 	{
 		{ 1, 0, 0, 0 },
 		{ 0, 1, 0, 0 },
@@ -2405,7 +3015,7 @@ void kgfw_graphics_settings_set(kgfw_graphics_settings_action_enum action, unsig
 
 	switch (action) {
 		case KGFW_GRAPHICS_SETTINGS_ACTION_SET:
-			change = state.settings & ~settings;
+			change = state.settings &~settings;
 			state.settings = settings;
 			break;
 		case KGFW_GRAPHICS_SETTINGS_ACTION_ENABLE:
@@ -2583,7 +3193,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	return 0;
 }
 
-void kgfw_graphics_draw(void) {
+int kgfw_graphics_draw(void) {
 	float color[4] = { 0.57f, 0.59f, 0.58f, 1.0f };
 	state.devctx->lpVtbl->ClearRenderTargetView(state.devctx, state.target, color);
 	state.devctx->lpVtbl->ClearDepthStencilView(state.devctx, state.depth_view, D3D11_CLEAR_DEPTH, 1, 0xFF);
@@ -2623,7 +3233,11 @@ void kgfw_graphics_draw(void) {
 		meshes_draw_recursive_fchild(state.mesh_root);
 	}
 
-	state.swapchain->lpVtbl->Present(state.swapchain, (state.settings & KGFW_GRAPHICS_SETTINGS_VSYNC) != 0, 0);
+	if (FAILED(state.swapchain->lpVtbl->Present(state.swapchain, (state.settings & KGFW_GRAPHICS_SETTINGS_VSYNC) != 0, 0))) {
+		return 1;
+	}
+
+	return 0;
 }
 
 void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture, kgfw_graphics_texture_use_enum use) {
@@ -2972,11 +3586,10 @@ static void meshes_free_recursive(mesh_node_t * mesh) {
 		return;
 	}
 
-	if (mesh->child == NULL) {
-		return;
+	if (mesh->child != NULL) {
+		meshes_free_recursive_fchild(mesh->child);
 	}
 
-	meshes_free_recursive_fchild(mesh->child);
 	meshes_free(mesh);
 }
 
@@ -2985,21 +3598,23 @@ static void meshes_free_recursive_fchild(mesh_node_t * mesh) {
 		return;
 	}
 
-	meshes_free_recursive(mesh);
+	mesh_node_t * sibling = mesh->sibling;
 	for (mesh_node_t * m = mesh;;) {
-		m = m->sibling;
+		m = sibling;
 		if (m == NULL) {
 			break;
 		}
+		sibling = m->sibling;
 
 		meshes_free_recursive(m);
 	}
+	meshes_free_recursive(mesh);
 }
 
 static void update_settings(unsigned int change) {
-	if (change & KGFW_GRAPHICS_SETTINGS_VSYNC) {
+	if (change &KGFW_GRAPHICS_SETTINGS_VSYNC) {
 		if (state.window != NULL) {
-			//glfwSwapInterval((state.settings & KGFW_GRAPHICS_SETTINGS_VSYNC));
+			//glfwSwapInterval((state.settings &KGFW_GRAPHICS_SETTINGS_VSYNC));
 		}
 	}
 }

@@ -113,7 +113,7 @@ typedef enum kgfw_graphics_texture_use {
 KGFW_PUBLIC int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera);
 KGFW_PUBLIC void kgfw_graphics_set_window(kgfw_window_t * window);
 KGFW_PUBLIC kgfw_window_t * kgfw_graphics_get_window(void);
-KGFW_PUBLIC void kgfw_graphics_draw(void);
+KGFW_PUBLIC int kgfw_graphics_draw(void);
 KGFW_PUBLIC void kgfw_graphics_viewport(unsigned int width, unsigned int height);
 KGFW_PUBLIC kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, kgfw_graphics_mesh_node_t * parent);
 KGFW_PUBLIC void kgfw_graphics_mesh_destroy(kgfw_graphics_mesh_node_t * mesh);

@@ -258,7 +258,10 @@ int main(int argc, char ** argv) {
 	//kgfw_graphics_mesh_node_t * current = NULL;
 	while (!state.window.closed && !state.exit) {
 		kgfw_time_start();
-		kgfw_graphics_draw();
+		if (kgfw_graphics_draw() != 0) {
+			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to draw");
+			break;
+		}
 
 		if (kgfw_window_update(&state.window) != 0) {
 			state.exit = 1;
