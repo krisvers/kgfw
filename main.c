@@ -6,6 +6,7 @@
 #include "kgfw/kgfw.h"
 #include "kgfw/ktga/ktga.h"
 #include "kgfw/koml/koml.h"
+#include "kgfw/kobj/kobj.h"
 #ifndef KGFW_WINDOWS
 #include <unistd.h>
 #endif
@@ -18,7 +19,7 @@ struct {
 	unsigned char exit;
 } static state = {
 	{ 0 },
-	{ { 0, 0, 5 }, { 0, 0, 0 }, { 1, 1 }, 90, 0.01f, 1000.0f, 1.3333f, 1 },
+	{ { 0, 0, 5 }, { 0, 0, 0 }, { 1, 1 }, 90, 0.01f, 1000.0f, 1.3333f, 0 },
 	1, 0
 };
 
@@ -80,7 +81,7 @@ typedef struct wire_t {
 
 #define STORAGE_MAX_GATES 256
 #define STORAGE_MAX_WIRES 512
-#define STORAGE_MAX_TEXTURES 16
+#define STORAGE_MAX_TEXTURES 64
 #define EVALUATION_MAX_CYCLES 100
 
 struct {
@@ -171,6 +172,8 @@ int main(int argc, char ** argv) {
 		return 1;
 	}
 
+	kgfw_time_init();
+
 	/* work-around for pylauncher bug */
 	#ifndef KGFW_WINDOWS
 	if (argc > 1) {
@@ -255,7 +258,122 @@ int main(int argc, char ** argv) {
 
 	mov->init(mov, &mov_state);
 
-	//kgfw_graphics_mesh_node_t * current = NULL;
+	{
+		void * buffer = NULL;
+		unsigned long long int length = 0;
+		{
+			FILE * fp = fopen("assets/models/trenchgun.obj", "rb");
+			if (fp == NULL) {
+				return 69;
+			}
+
+			fseek(fp, 0, SEEK_END);
+			length = ftell(fp);
+			fseek(fp, 0, SEEK_SET);
+			
+			buffer = malloc(length);
+			if (buffer == NULL) {
+				fclose(fp);
+				return 70;
+			}
+
+			if (fread(buffer, 1, length, fp) != length) {
+				fclose(fp);
+				free(buffer);
+				return 71;
+			}
+
+			fclose(fp);
+		}
+
+		kgfw_graphics_mesh_t mesh = {
+			.vertices = NULL,
+			.vertices_count = 0,
+			.indices = NULL,
+			.indices_count = 0,
+
+			.pos = { 0, 0, 0 },
+			.rot = { 0, 0, 0 },
+			.scale = { 1, 1, 1 },
+		};
+
+		kobj_t kobj = { 0 };
+		kobj_load(&kobj, buffer, length);
+
+		mesh.vertices = malloc(sizeof(kgfw_graphics_vertex_t) * kobj.vcount);
+		mesh.indices = malloc(sizeof(unsigned int) * 3 * kobj.fcount);
+		mesh.vertices_count = kobj.vcount;
+		mesh.indices_count = kobj.fcount * 3;
+
+		for (unsigned long long int i = 0; i < mesh.vertices_count; ++i) {
+			mesh.vertices[i].x = kobj.vertices[i * 3 + 0];
+			mesh.vertices[i].y = kobj.vertices[i * 3 + 1];
+			mesh.vertices[i].z = kobj.vertices[i * 3 + 2];
+			mesh.vertices[i].r = 1;
+			mesh.vertices[i].g = 1;
+			mesh.vertices[i].b = 1;
+		}
+
+		for (unsigned long long int i = 0; i < kobj.fcount; ++i) {
+			if (kobj.faces[i].vn1 != 0) {
+				mesh.vertices[kobj.faces[i].v1 - 1].nx = kobj.normals[(kobj.faces[i].vn1 - 1) * 3 + 0];
+				mesh.vertices[kobj.faces[i].v1 - 1].ny = kobj.normals[(kobj.faces[i].vn1 - 1) * 3 + 1];
+				mesh.vertices[kobj.faces[i].v1 - 1].nz = kobj.normals[(kobj.faces[i].vn1 - 1) * 3 + 2];
+			}
+			if (kobj.faces[i].vn2 != 0) {
+				mesh.vertices[kobj.faces[i].v2 - 1].nx = kobj.normals[(kobj.faces[i].vn2 - 1) * 3 + 0];
+				mesh.vertices[kobj.faces[i].v2 - 1].ny = kobj.normals[(kobj.faces[i].vn2 - 1) * 3 + 1];
+				mesh.vertices[kobj.faces[i].v2 - 1].nz = kobj.normals[(kobj.faces[i].vn2 - 1) * 3 + 2];
+			}
+			if (kobj.faces[i].vn3 != 0) {
+				mesh.vertices[kobj.faces[i].v3 - 1].nx = kobj.normals[(kobj.faces[i].vn3 - 1) * 3 + 0];
+				mesh.vertices[kobj.faces[i].v3 - 1].ny = kobj.normals[(kobj.faces[i].vn3 - 1) * 3 + 1];
+				mesh.vertices[kobj.faces[i].v3 - 1].nz = kobj.normals[(kobj.faces[i].vn3 - 1) * 3 + 2];
+			}
+
+			if (kobj.faces[i].vt1 != 0) {
+				mesh.vertices[kobj.faces[i].v1 - 1].u = kobj.uvs[(kobj.faces[i].vt1 - 1) * 2 + 0];
+				mesh.vertices[kobj.faces[i].v1 - 1].v = kobj.uvs[(kobj.faces[i].vt1 - 1) * 2 + 1];
+			}
+			if (kobj.faces[i].vt2 != 0) {
+				mesh.vertices[kobj.faces[i].v2 - 1].u = kobj.uvs[(kobj.faces[i].vt2 - 1) * 2 + 0];
+				mesh.vertices[kobj.faces[i].v2 - 1].v = kobj.uvs[(kobj.faces[i].vt2 - 1) * 2 + 1];
+			}
+			if (kobj.faces[i].vt3 != 0) {
+				mesh.vertices[kobj.faces[i].v3 - 1].u = kobj.uvs[(kobj.faces[i].vt3 - 1) * 2 + 0];
+				mesh.vertices[kobj.faces[i].v3 - 1].v = kobj.uvs[(kobj.faces[i].vt3 - 1) * 2 + 1];
+			}
+
+			if (kobj.faces[i].v1 != 0) {
+				mesh.indices[i * 3 + 0] = kobj.faces[i].v1 - 1;
+			}
+			if (kobj.faces[i].v2 != 0) {
+				mesh.indices[i * 3 + 1] = kobj.faces[i].v2 - 1;
+			}
+			if (kobj.faces[i].v3 != 0) {
+				mesh.indices[i * 3 + 2] = kobj.faces[i].v3 - 1;
+			}
+		}
+
+		kobj_destroy(&kobj);
+
+		kgfw_graphics_mesh_node_t * node = kgfw_graphics_mesh_new(&mesh, NULL);
+		//free(mesh.vertices);
+		//free(mesh.indices);
+
+		ktga_t * tga = texture_get("trenchgun");
+		kgfw_graphics_texture_t tex = {
+			.bitmap = tga->bitmap,
+			.width = tga->header.img_w,
+			.height = tga->header.img_h,
+			.fmt = KGFW_GRAPHICS_TEXTURE_FORMAT_BGRA,
+			.u_wrap = KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
+			.v_wrap = KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
+			.filtering = KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
+		};
+		kgfw_graphics_mesh_texture(node, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+	}
+
 	while (!state.window.closed && !state.exit) {
 		kgfw_time_start();
 		if (kgfw_graphics_draw() != 0) {
@@ -300,7 +418,7 @@ int main(int argc, char ** argv) {
 		kgfw_audio_update();
 		kgfw_time_end();
 		if (state.input) {
-			//kgfw_logf(KGFW_LOG_SEVERITY_INFO, "frame time: %f    fps: %f", kgfw_time_delta(), 1 / kgfw_time_delta());
+			kgfw_logf(KGFW_LOG_SEVERITY_INFO, "abs time: %f    frame time: %f    fps: %f", kgfw_time_get(), kgfw_time_delta(), 1 / kgfw_time_delta());
 		}
 
 		for (unsigned long long int i = 0; i < storage.gates_count; ++i) {

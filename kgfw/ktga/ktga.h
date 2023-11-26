@@ -1,5 +1,5 @@
-#ifndef KRISVERS_KGFW_KTGA_H
-#define KRISVERS_KGFW_KTGA_H
+#ifndef KRISVERS_KTGA_H
+#define KRISVERS_KTGA_H
 
 #include "../kgfw_defines.h"
 

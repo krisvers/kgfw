@@ -1,6 +1,7 @@
 #include "kgfw_defines.h"
 
 #if defined(KGFW_VULKAN)
+//#error Vulkan implementation is unsuitable for use
 
 #include "kgfw_graphics.h"
 #include "kgfw_camera.h"
@@ -57,6 +58,8 @@ typedef struct mesh_node {
 		VkDeviceMemory vmem;
 		VkBuffer ibuf;
 		VkDeviceMemory imem;
+		VkImage tex;
+		VkDeviceMemory tmem;
 
 		unsigned long long int vbo_size;
 		unsigned long long int ibo_size;
@@ -120,6 +123,8 @@ struct {
 		struct {
 			VkShaderModule vshader;
 			VkShaderModule fshader;
+			VkImageView view;
+			VkSampler sampler;
 		} shaders;
 		struct {
 			VkCommandPool pool;
@@ -338,7 +343,7 @@ static int pipeline_create(void) {
 		.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
 		.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
 		.colorBlendOp = VK_BLEND_OP_ADD,
-		.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+		.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
 		.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
 		.alphaBlendOp = VK_BLEND_OP_ADD,
 		.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
@@ -1573,7 +1578,149 @@ int kgfw_graphics_draw(void) {
 
 void kgfw_graphics_mesh_texture(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_t * texture, kgfw_graphics_texture_use_enum use) {
 	mesh_node_t * m = (mesh_node_t *) mesh;
+	unsigned long long int size = texture->width * texture->height * 4;
 
+	VkBuffer staging;
+	VkDeviceMemory staging_mem;
+
+	{
+		if (buffer_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging, &staging_mem) != 0) {
+			return;
+		}
+
+		void * data;
+		vkMapMemory(state.vk.dev, staging_mem, 0, size, 0, &data);
+		memcpy(data, texture->bitmap, size);
+		vkUnmapMemory(state.vk.dev, staging_mem);
+	}
+
+	VkFormat fmt = (texture->fmt == KGFW_GRAPHICS_TEXTURE_FORMAT_RGBA) ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_B8G8R8A8_SRGB;
+
+	VkImageCreateInfo create_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+		.imageType = VK_IMAGE_TYPE_2D,
+		.format = fmt,
+		.extent = { .width = texture->width, .height = texture->height, .depth = 1 },
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = 0,
+		.pQueueFamilyIndices = NULL,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+	};
+
+	VK_CHECK_DO_NO_SWAP(vkCreateImage(state.vk.dev, &create_info, state.vk.allocator, &m->vk.tex), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan texture image");
+		return;
+	});
+
+	VkMemoryRequirements reqs;
+	vkGetImageMemoryRequirements(state.vk.dev, m->vk.tex, &reqs);
+
+	VkPhysicalDeviceMemoryProperties props;
+	vkGetPhysicalDeviceMemoryProperties(state.vk.pdev, &props);
+	unsigned int index = 0;
+	for (index = 0; index < props.memoryTypeCount; ++index) {
+		if ((reqs.memoryTypeBits & (1 << index)) && (props.memoryTypes[index].propertyFlags & (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) == (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+			goto found;
+		}
+	}
+	kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to find Vulkan memory type for texture image");
+	return;
+found:;
+
+	VkMemoryAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.pNext = NULL,
+		.allocationSize = reqs.size,
+		.memoryTypeIndex = index,
+	};
+
+	VK_CHECK_DO_NO_SWAP(vkAllocateMemory(state.vk.dev, &alloc_info, state.vk.allocator, &m->vk.tmem), {
+		kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to allocate Vulkan texture image memory");
+		return;
+	});
+
+	vkBindImageMemory(state.vk.dev, m->vk.tex, m->vk.tmem, 0);
+
+	{
+		VkCommandBufferAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.pNext = NULL,
+			.commandPool = state.vk.cmd.pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1,
+		};
+
+		VkCommandBuffer cmd;
+		vkAllocateCommandBuffers(state.vk.dev, &alloc_info, &cmd);
+
+		VkCommandBufferBeginInfo begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.pNext = NULL,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+			.pInheritanceInfo = NULL,
+		};
+
+		vkBeginCommandBuffer(cmd, &begin_info);
+
+		{
+			VkImageMemoryBarrier barrier = {
+				.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+				.pNext = NULL,
+				.srcAccessMask = 0,
+				.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.image = m->vk.tex,
+				.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
+			};
+
+			vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+			vkCmdCopyBufferToImage(cmd, staging, m->vk.tex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &(VkBufferImageCopy){
+				.bufferOffset = 0,
+				.bufferRowLength = 0,
+				.bufferImageHeight = 0,
+				.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
+				.imageOffset = { 0, 0, 0 },
+				.imageExtent = { texture->width, texture->height, 1 },
+			});
+
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+		}
+
+		vkEndCommandBuffer(cmd);
+
+		VkSubmitInfo submit_info = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.pNext = NULL,
+			.waitSemaphoreCount = 0,
+			.pWaitSemaphores = NULL,
+			.pWaitDstStageMask = NULL,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &cmd,
+			.signalSemaphoreCount = 0,
+			.pSignalSemaphores = NULL,
+		};
+
+		vkQueueSubmit(state.vk.gfx_queue, 1, &submit_info, VK_NULL_HANDLE);
+		vkQueueWaitIdle(state.vk.gfx_queue);
+
+		vkFreeCommandBuffers(state.vk.dev, state.vk.cmd.pool, 1, &cmd);
+	}
+
+	buffer_destroy(&staging, &staging_mem);
 }
 
 void kgfw_graphics_mesh_texture_detach(kgfw_graphics_mesh_node_t * mesh, kgfw_graphics_texture_use_enum use) {
@@ -1735,6 +1882,10 @@ static void meshes_free(mesh_node_t * node) {
 
 	buffer_destroy(&node->vk.vbuf, &node->vk.vmem);
 	buffer_destroy(&node->vk.ibuf, &node->vk.imem);
+	if (node->vk.tex != VK_NULL_HANDLE && node->vk.tmem != VK_NULL_HANDLE) {
+		vkDestroyImage(state.vk.dev, node->vk.tex, state.vk.allocator);
+		vkFreeMemory(state.vk.dev, node->vk.tmem, state.vk.allocator);
+	}
 
 	free(node);
 }
@@ -1803,7 +1954,7 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 		vkCmdBindIndexBuffer(state.vk.cmd.buffer, mesh->vk.ibuf, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdSetViewport(state.vk.cmd.buffer, 0, 1, &state.vk.viewport);
 		vkCmdSetScissor(state.vk.cmd.buffer, 0, 1, &state.vk.scissor);
-		vkCmdDrawIndexed(state.vk.cmd.buffer, 6, 1, 0, 0, 0);
+		vkCmdDrawIndexed(state.vk.cmd.buffer, mesh->vk.ibo_size, 1, 0, 0, 0);
 	}
 }
 
@@ -2579,6 +2730,7 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	GL_CALL(glBindVertexArray(mesh->gl.vao));
 	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, mesh->gl.vbo));
 	GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->gl.ibo));
+	//GL_CALL(glDrawArrays(GL_TRIANGLES, 0, mesh->gl.vbo_size));
 	GL_CALL(glDrawElements(GL_TRIANGLES, mesh->gl.ibo_size, GL_UNSIGNED_INT, 0));
 }
 

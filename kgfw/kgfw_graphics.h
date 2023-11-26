@@ -90,7 +90,19 @@ typedef struct kgfw_graphics_mesh_node {
 			unsigned long long int _e;
 			unsigned long long int _f;
 		} _b;
-	}_internal;
+		
+		struct {
+			void * _a;
+			void * _b;
+			void * _c;
+			void * _d;
+			void * _e;
+			void * _f;
+
+			unsigned long long int _g;
+			unsigned long long int _h;
+		} _c;
+	} _internal;
 } kgfw_graphics_mesh_node_t;
 
 typedef enum kgfw_graphics_settings_action {

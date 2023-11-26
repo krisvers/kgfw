@@ -14,5 +14,5 @@ void kgfw_camera_perspective(kgfw_camera_t * camera, mat4x4 outm) {
 }
 
 void kgfw_camera_view(kgfw_camera_t * camera, mat4x4 outm) {
-	mat4x4_translate(outm, -camera->pos[0], -camera->pos[1], camera->pos[2]);
+	mat4x4_translate(outm, -camera->pos[0], -camera->pos[1], -camera->pos[2]);
 }
