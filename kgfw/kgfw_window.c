@@ -22,7 +22,7 @@ int kgfw_window_create(kgfw_window_t * out_window, unsigned int width, unsigned 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	#ifdef KGFW_APPLE_MACOS
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 	#endif
 
 	#elif (defined(KGFW_VULKAN))

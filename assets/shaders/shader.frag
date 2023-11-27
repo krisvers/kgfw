@@ -16,5 +16,5 @@ void main() {
 		discard;
 	}
 
-	out_color = tex;//vec4((v_normal + 1) / 2, 1);//vec4(v_pos, 1);
+	out_color = /*tex;*/vec4((v_normal + 1) / 2, 1);//vec4(v_pos, 1);
 }

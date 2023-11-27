@@ -9,5 +9,5 @@ as files = "assets/textures/teapot.tga", "assets/textures/trenchgun.tga", "asset
 as names = "teapot", "trenchgun", "moon", "richtofen", "relay_on", "relay_off", "put_on", "put_off", "font", "empty", "and", "xor", "or", "not", "wire_on", "wire_off", "selected";
 
 [meshes]
-as files = "assets/meshes/richtofen.obj", "assets/meshes/teapot.obj", "assets/meshes/cube.obj", "assets/meshes/trenchgun.obj";
-as names = "richtofen", "teapot", "cube", "trenchgun";
+as files = "assets/meshes/richtofen.obj", "assets/meshes/teapot.obj", "assets/meshes/cube.obj", "assets/meshes/trenchgun.obj", "assets/meshes/zebra.obj";
+as names = "richtofen", "teapot", "cube", "trenchgun", "zebra";

@@ -278,6 +278,10 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 	if (key == KGFW_KEY_ESCAPE) {
 		state.exit = 1;
 	}
+	if (key == KGFW_KEY_R && action == 1) {
+		char argv[3] = { "gfx", "reload", "shaders" };
+		kgfw_console_run(3, argv);
+	}
 }
 
 static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsigned char action) {
