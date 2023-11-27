@@ -7,6 +7,8 @@ int kobj_load(kobj_t * out_obj, void * buffer, unsigned long long int length) {
 		return 1;
 	}
 
+	memset(out_obj, 0, sizeof(*out_obj));
+
 	char * str = buffer;
 
 	unsigned int vindex;
