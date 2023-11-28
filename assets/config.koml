@@ -5,9 +5,9 @@ as names = "test";
 |
 
 [textures]
-as files = "assets/textures/teapot.tga", "assets/textures/trenchgun.tga", "assets/textures/moon.tga", "assets/textures/richtofen.tga", "assets/textures/relay_on.tga", "assets/textures/relay_off.tga", "assets/textures/put_on.tga", "assets/textures/put_off.tga", "assets/textures/font.tga", "assets/textures/empty.tga", "assets/textures/and.tga", "assets/textures/xor.tga", "assets/textures/or.tga", "assets/textures/not.tga", "assets/textures/wire_on.tga", "assets/textures/wire_off.tga", "assets/textures/selected.tga";
-as names = "teapot", "trenchgun", "moon", "richtofen", "relay_on", "relay_off", "put_on", "put_off", "font", "empty", "and", "xor", "or", "not", "wire_on", "wire_off", "selected";
+as files = "assets/textures/spot.tga", "assets/textures/teapot.tga", "assets/textures/trenchgun.tga", "assets/textures/moon.tga", "assets/textures/richtofen.tga", "assets/textures/relay_on.tga", "assets/textures/relay_off.tga", "assets/textures/put_on.tga", "assets/textures/put_off.tga", "assets/textures/font.tga", "assets/textures/empty.tga", "assets/textures/and.tga", "assets/textures/xor.tga", "assets/textures/or.tga", "assets/textures/not.tga", "assets/textures/wire_on.tga", "assets/textures/wire_off.tga", "assets/textures/selected.tga";
+as names = "spot", "teapot", "trenchgun", "moon", "richtofen", "relay_on", "relay_off", "put_on", "put_off", "font", "empty", "and", "xor", "or", "not", "wire_on", "wire_off", "selected";
 
 [meshes]
-as files = "assets/meshes/richtofen.obj", "assets/meshes/teapot.obj", "assets/meshes/cube.obj", "assets/meshes/trenchgun.obj", "assets/meshes/zebra.obj";
-as names = "richtofen", "teapot", "cube", "trenchgun", "zebra";
+as files = "assets/meshes/cow.obj", "assets/meshes/dragon.obj", "assets/meshes/bunny.obj", "assets/meshes/suzanne.obj", "assets/meshes/spot.obj", "assets/meshes/nefertiti.obj", "assets/meshes/richtofen.obj", "assets/meshes/teapot.obj", "assets/meshes/cube.obj", "assets/meshes/trenchgun.obj", "assets/meshes/zebra.obj";
+as names = "cow", "dragon", "bunny", "suzanne", "spot", "nefertiti", "richtofen", "teapot", "cube", "trenchgun", "zebra";

@@ -278,9 +278,12 @@ static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action) {
 	if (key == KGFW_KEY_ESCAPE) {
 		state.exit = 1;
 	}
-	if (key == KGFW_KEY_R && action == 1) {
-		char argv[3] = { "gfx", "reload", "shaders" };
-		kgfw_console_run(3, argv);
+
+	if (state.input) {
+		if (key == KGFW_KEY_R && action == 1) {
+			char * argv[3] = { "gfx", "reload", "shaders" };
+			kgfw_console_run(3, argv);
+		}
 	}
 }
 
@@ -354,6 +357,7 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 	}
 
 	float move_speed = 10.0f;
+	float move_fast_speed = 50.0f;
 	float move_slow_speed = 2.0f;
 	float look_sensitivity = 90.0f;
 	float look_slow_sensitivity = 40.0f;
@@ -369,6 +373,10 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 	)) {
 		move_speed = move_slow_speed;
 		look_sensitivity = look_slow_sensitivity;
+	}
+
+	if (kgfw_input_key(KGFW_KEY_LSHIFT)) {
+		move_speed = move_fast_speed;
 	}
 
 	if (kgfw_input_key(KGFW_KEY_RIGHT)) {
