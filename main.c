@@ -17,10 +17,34 @@ struct {
 	kgfw_camera_t camera;
 	unsigned char input;
 	unsigned char exit;
+	struct {
+		float movement;
+		float arrow_speed;
+		float mouse_speed;
+		float jump_force;
+		float gravity;
+	} settings;
 } static state = {
 	{ 0 },
 	{ { 0, 0, 5 }, { 0, 0, 0 }, { 1, 1 }, 90, 0.01f, 1000.0f, 1.3333f, 0 },
-	1, 0
+	1, 0,
+	{
+		10.0f,
+		90.0f,
+		0.15f,
+		10.0f,
+		25.0f,
+	},
+};
+
+struct {
+	vec3 pos;
+	vec3 rot;
+	vec3 vel;
+} static player = {
+	{ 0, 0, 0 },
+	{ 0, 0, 0 },
+	{ 0, 0, 0 },
 };
 
 #define STORAGE_MAX_TEXTURES 64
@@ -61,6 +85,7 @@ typedef struct player_movement {
 typedef struct player_movement_state {
 	KGFW_DEFAULT_COMPONENT_STATE_MEMBERS
 	kgfw_camera_t * camera;
+	kgfw_graphics_mesh_node_t * mesh;
 } player_movement_state_t;
 
 static int player_movement_init(player_movement_t * self, player_movement_state_t * mstate);
@@ -169,6 +194,8 @@ int main(int argc, char ** argv) {
 		sizeof(player_movement_state_t),
 		&state.camera,
 	};
+
+	mov_state.mesh = kgfw_graphics_mesh_new(mesh_get("capsule"), NULL);
 
 	mov->init(mov, &mov_state);
 
@@ -356,12 +383,13 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 		return 0;
 	}
 
-	float move_speed = 10.0f;
-	float move_fast_speed = 50.0f;
-	float move_slow_speed = 2.0f;
-	float look_sensitivity = 90.0f;
-	float look_slow_sensitivity = 40.0f;
-	float mouse_sensitivity = 0.15f;
+	float move_speed = state.settings.movement;
+	float move_fast_speed = state.settings.movement * 5.0f;
+	float move_slow_speed = state.settings.movement / 5.0f;
+	float look_sensitivity = state.settings.arrow_speed;
+	float look_slow_sensitivity = state.settings.arrow_speed / 4.0f;
+	float mouse_sensitivity = state.settings.mouse_speed;
+	float jump_force = state.settings.jump_force;
 	float delta = kgfw_time_delta();
 
 	if (kgfw_input_key(
@@ -380,28 +408,28 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 	}
 
 	if (kgfw_input_key(KGFW_KEY_RIGHT)) {
-		mstate->camera->rot[1] += look_sensitivity * delta;
+		player.rot[1] += look_sensitivity * delta;
 	}
 	if (kgfw_input_key(KGFW_KEY_LEFT)) {
-		mstate->camera->rot[1] -= look_sensitivity * delta;
+		player.rot[1] -= look_sensitivity * delta;
 	}
 	if (kgfw_input_key(KGFW_KEY_UP)) {
-		mstate->camera->rot[0] += look_sensitivity * delta;
+		player.rot[0] += look_sensitivity * delta;
 	}
 	if (kgfw_input_key(KGFW_KEY_DOWN)) {
-		mstate->camera->rot[0] -= look_sensitivity * delta;
+		player.rot[0] -= look_sensitivity * delta;
 	}
 
 	float dx, dy;
 	kgfw_input_mouse_delta(&dx, &dy);
-	mstate->camera->rot[0] += dy * mouse_sensitivity;
-	mstate->camera->rot[1] -= dx * mouse_sensitivity;
+	player.rot[0] += dy * mouse_sensitivity;
+	player.rot[1] -= dx * mouse_sensitivity;
 
-	if (mstate->camera->rot[0] > 90) {
-		mstate->camera->rot[0] = 90;
+	if (player.rot[0] > 90) {
+		player.rot[0] = 90;
 	}
-	if (mstate->camera->rot[0] < -90) {
-		mstate->camera->rot[0] = -90;
+	if (player.rot[0] < -90) {
+		player.rot[0] = -90;
 	}
 
 	vec3 up;
@@ -409,30 +437,55 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 	vec3 forward;
 	up[0] = 0; up[1] = 1; up[2] = 0;
 	right[0] = 0; right[1] = 0; right[2] = 0;
-	forward[0] = -sinf(mstate->camera->rot[1] * 3.141592f / 180.0f); forward[1] = 0; forward[2] = cosf(mstate->camera->rot[1] * 3.141592f / 180.0f);
+	forward[0] = -sinf(player.rot[1] * 3.141592f / 180.0f); forward[1] = 0; forward[2] = cosf(player.rot[1] * 3.141592f / 180.0f);
 	vec3_mul_cross(right, up, forward);
 	vec3_scale(up, up, move_speed * delta);
 	vec3_scale(right, right, move_speed * delta);
 	vec3_scale(forward, forward, -move_speed * delta);
 
 	if (kgfw_input_key(KGFW_KEY_W)) {
-		vec3_add(mstate->camera->pos, mstate->camera->pos, forward);
+		vec3_add(player.pos, player.pos, forward);
 	}
 	if (kgfw_input_key(KGFW_KEY_S)) {
-		vec3_sub(mstate->camera->pos, mstate->camera->pos, forward);
+		vec3_sub(player.pos, player.pos, forward);
 	}
 	if (kgfw_input_key(KGFW_KEY_D)) {
-		vec3_add(mstate->camera->pos, mstate->camera->pos, right);
+		vec3_add(player.pos, player.pos, right);
 	}
 	if (kgfw_input_key(KGFW_KEY_A)) {
-		vec3_sub(mstate->camera->pos, mstate->camera->pos, right);
+		vec3_sub(player.pos, player.pos, right);
 	}
 	if (kgfw_input_key(KGFW_KEY_E)) {
-		vec3_add(mstate->camera->pos, mstate->camera->pos, up);
+		vec3_add(player.pos, player.pos, up);
 	}
 	if (kgfw_input_key(KGFW_KEY_Q)) {
-		vec3_sub(mstate->camera->pos, mstate->camera->pos, up);
+		vec3_sub(player.pos, player.pos, up);
 	}
+	if (kgfw_input_key_down(KGFW_KEY_SPACE)) {
+		player.vel[1] = jump_force;
+	}
+
+	if (player.pos[1] <= 0) {
+		player.vel[1] = 0;
+		player.pos[1] = 0;
+	} else {
+		player.vel[1] -= state.settings.gravity;
+	}
+
+	player.pos[0] += player.vel[0];
+	player.pos[1] += player.vel[1];
+	player.pos[2] += player.vel[2];
+
+	mstate->camera->pos[0] = player.pos[0];
+	mstate->camera->pos[1] = player.pos[1] + 4;
+	mstate->camera->pos[2] = player.pos[2];
+	mstate->camera->rot[0] = player.rot[0];
+	mstate->camera->rot[1] = player.rot[1];
+	mstate->camera->rot[2] = player.rot[2];
+
+	mstate->mesh->transform.pos[0] = player.pos[0];
+	mstate->mesh->transform.pos[1] = player.pos[1];
+	mstate->mesh->transform.pos[2] = player.pos[2];
 
 	return 0;
 }
@@ -734,18 +787,19 @@ static kgfw_graphics_mesh_t * mesh_get(char * name) {
 }
 
 static int game_command(int argc, char ** argv) {
-	kgfw_graphics_mesh_node_t * node = NULL;
+	const char * subcommands = "mesh    fov    movement    arrow_speed    mouse_speed    jump_force    gravity    pos";
 	if (argc < 2) {
-		const char * subcommands = "mesh";
 		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "subcommands: %s", subcommands);
 		return 0;
 	}
+
 	if (strcmp(argv[1], "mesh") == 0) {
 		if (argc < 3) {
 			const char * args = "[mesh name] (optional texture name)";
-			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "args: %s", args);
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
 			return 0;
 		}
+		kgfw_graphics_mesh_node_t * node = NULL;
 		if (argc >= 3) {
 			kgfw_graphics_mesh_t * mesh = mesh_get(argv[2]);
 			if (mesh == NULL) {
@@ -756,6 +810,8 @@ static int game_command(int argc, char ** argv) {
 			node->transform.pos[0] = state.camera.pos[0];
 			node->transform.pos[1] = state.camera.pos[1];
 			node->transform.pos[2] = state.camera.pos[2];
+
+			node->transform.rot[1] = state.camera.rot[1];
 		}
 		if (argc >= 4) {
 			ktga_t * tga = texture_get(argv[3]);
@@ -775,6 +831,75 @@ static int game_command(int argc, char ** argv) {
 			};
 			kgfw_graphics_mesh_texture(node, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 		}
+	} else if (strcmp(argv[1], "fov") == 0) {
+		if (argc < 3) {
+			const char * args = "[field of view in degrees]";
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
+			return 0;
+		}
+
+		float f = strtof(argv[2], NULL);
+		state.camera.fov = f;
+	} else if (strcmp(argv[1], "movement") == 0) {
+		if (argc < 3) {
+			const char * args = "[movement speed]";
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
+			return 0;
+		}
+
+		float f = strtof(argv[2], NULL);
+		state.settings.movement = f;
+	} else if (strcmp(argv[1], "arrow_speed") == 0) {
+		if (argc < 3) {
+			const char * args = "[arrow speed]";
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
+			return 0;
+		}
+
+		float f = strtof(argv[2], NULL);
+		state.settings.arrow_speed = f;
+	} else if (strcmp(argv[1], "mouse_speed") == 0) {
+		if (argc < 3) {
+			const char * args = "[mouse speed]";
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
+			return 0;
+		}
+
+		float f = strtof(argv[2], NULL);
+		state.settings.mouse_speed = f;
+	} else if (strcmp(argv[1], "jump_force") == 0) {
+		if (argc < 3) {
+			const char * args = "[jump force]";
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
+			return 0;
+		}
+
+		float f = strtof(argv[2], NULL);
+		state.settings.jump_force = f;
+	} else if (strcmp(argv[1], "gravity") == 0) {
+		if (argc < 3) {
+			const char * args = "[gravity]";
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
+			return 0;
+		}
+
+		float f = strtof(argv[2], NULL);
+		state.settings.gravity = f;
+	} else if (strcmp(argv[1], "pos") == 0) {
+		if (argc < 5) {
+			const char * args = "[pos]";
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
+			return 0;
+		}
+
+		player.pos[0] = strtof(argv[2], NULL);
+		player.pos[1] = strtof(argv[3], NULL);
+		player.pos[2] = strtof(argv[4], NULL);
+		state.camera.pos[0] = player.pos[0];
+		state.camera.pos[1] = player.pos[1];
+		state.camera.pos[2] = player.pos[2];
+	} else {
+		kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "subcommands: %s", subcommands);
 	}
 
 	return 0;

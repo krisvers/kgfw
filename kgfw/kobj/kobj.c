@@ -36,7 +36,7 @@ top:;
 	for (unsigned int i = 0; i < length; ++i) {
 		c = str[i];
 		nextc = (i + 1 < length) ? str[i + 1] : 0;
-		if (c == '#' || c == 'o' == c == 'm' || c == 'u' || c == 'l' || c == 's' || (c == 'v' && nextc == 'p')) {
+		if (c == '#' || c == 'o' || c == 'm' || c == 'u' || c == 'l' || c == 's' || (c == 'v' && nextc == 'p')) {
 			while (c != '\n') {
 				c = str[++i];
 			}

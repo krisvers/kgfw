@@ -1490,7 +1490,7 @@ int kgfw_graphics_draw(void) {
 	VkClearValue color = {
 		.color = {
 			.float32 = {
-				0.57f, 0.59f, 0.58f, 1.0f
+				0.086f, 0.082f, 0.090f, 1.0f
 			}
 		}
 	};
@@ -2403,6 +2403,9 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	GL_CALL(glEnable(GL_BLEND));
 	GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 	//GL_CALL(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));
+	GL_CALL(glCullFace(GL_BACK));
+	GL_CALL(glFrontFace(GL_CCW));
+	GL_CALL(glEnable(GL_CULL_FACE));
 
 	update_settings(state.settings);
 
@@ -2411,7 +2414,8 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 int kgfw_graphics_draw(void) {
 	GL_CALL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
-	GL_CALL(glClearColor(0.57f, 0.59f, 0.58f, 1.0f));
+	/* 0.086, 0.082, 0.090 */
+	GL_CALL(glClearColor(0.086f, 0.082f, 0.090f, 1.0f));
 
 	mat4x4 mvp;
 	mat4x4 m;
@@ -2659,8 +2663,7 @@ static void mesh_transform(mesh_node_t * mesh, mat4x4 out_m) {
 		recurse_state.scale[0] = mesh->transform.scale[0];
 		recurse_state.scale[1] = mesh->transform.scale[1];
 		recurse_state.scale[2] = mesh->transform.scale[2];
-	}
-	else {
+	} else {
 		mat4x4_translate_in_place(out_m, recurse_state.pos[0] + mesh->transform.pos[0], recurse_state.pos[1] + mesh->transform.pos[1], recurse_state.pos[2] + mesh->transform.pos[2]);
 		recurse_state.pos[0] += mesh->transform.pos[0];
 		recurse_state.pos[1] += mesh->transform.pos[1];
@@ -2696,6 +2699,8 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 	GLint uniform_vp = GL_CALL(glGetUniformLocation(program, "unif_vp"));
 	GLint uniform_time = GL_CALL(glGetUniformLocation(program, "unif_time"));
 	GLint uniform_view = GL_CALL(glGetUniformLocation(program, "unif_view_pos"));
+	GLint uniform_textured_color = GL_CALL(glGetUniformLocation(program, "unif_textured_color"));
+	GLint uniform_textured_normal = GL_CALL(glGetUniformLocation(program, "unif_textured_normal"));
 	GLint uniform_texture_color = GL_CALL(glGetUniformLocation(program, "unif_texture_color"));
 	GLint uniform_texture_normal = GL_CALL(glGetUniformLocation(program, "unif_texture_normal"));
 
@@ -2709,20 +2714,22 @@ static void mesh_draw(mesh_node_t * mesh, mat4x4 out_m) {
 
 	GL_CALL(glUniform1i(uniform_texture_color, 0));
 	if (mesh->gl.tex == 0) {
+		GL_CALL(glUniform1f(uniform_textured_color, 0));
 		GL_CALL(glActiveTexture(GL_TEXTURE0));
 		GL_CALL(glBindTexture(GL_TEXTURE_2D, 0));
-	}
-	else {
+	} else {
+		GL_CALL(glUniform1f(uniform_textured_color, 1));
 		GL_CALL(glActiveTexture(GL_TEXTURE0));
 		GL_CALL(glBindTexture(GL_TEXTURE_2D, mesh->gl.tex));
 	}
 
 	GL_CALL(glUniform1i(uniform_texture_normal, 1));
 	if (mesh->gl.normal == 0) {
+		GL_CALL(glUniform1f(uniform_textured_normal, 0));
 		GL_CALL(glActiveTexture(GL_TEXTURE1));
 		GL_CALL(glBindTexture(GL_TEXTURE_2D, 0));
-	}
-	else {
+	} else {
+		GL_CALL(glUniform1f(uniform_textured_normal, 1));
 		GL_CALL(glActiveTexture(GL_TEXTURE1));
 		GL_CALL(glBindTexture(GL_TEXTURE_2D, mesh->gl.normal));
 	}
@@ -3346,7 +3353,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 }
 
 int kgfw_graphics_draw(void) {
-	float color[4] = { 0.57f, 0.59f, 0.58f, 1.0f };
+	float color[4] = { 0.086f, 0.082f, 0.090f, 1.0f };
 	state.devctx->lpVtbl->ClearRenderTargetView(state.devctx, state.target, color);
 	state.devctx->lpVtbl->ClearDepthStencilView(state.devctx, state.depth_view, D3D11_CLEAR_DEPTH, 1, 0xFF);
 

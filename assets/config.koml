@@ -9,5 +9,5 @@ as files = "assets/textures/spot.tga", "assets/textures/teapot.tga", "assets/tex
 as names = "spot", "teapot", "trenchgun", "moon", "richtofen", "relay_on", "relay_off", "put_on", "put_off", "font", "empty", "and", "xor", "or", "not", "wire_on", "wire_off", "selected";
 
 [meshes]
-as files = "assets/meshes/cow.obj", "assets/meshes/dragon.obj", "assets/meshes/bunny.obj", "assets/meshes/suzanne.obj", "assets/meshes/spot.obj", "assets/meshes/nefertiti.obj", "assets/meshes/richtofen.obj", "assets/meshes/teapot.obj", "assets/meshes/cube.obj", "assets/meshes/trenchgun.obj", "assets/meshes/zebra.obj";
-as names = "cow", "dragon", "bunny", "suzanne", "spot", "nefertiti", "richtofen", "teapot", "cube", "trenchgun", "zebra";
+as files = "assets/meshes/plane.obj", "assets/meshes/capsule.obj", "assets/meshes/cow.obj", "assets/meshes/dragon.obj", "assets/meshes/bunny.obj", "assets/meshes/suzanne.obj", "assets/meshes/spot.obj", "assets/meshes/nefertiti.obj", "assets/meshes/richtofen.obj", "assets/meshes/teapot.obj", "assets/meshes/cube.obj", "assets/meshes/trenchgun.obj", "assets/meshes/zebra.obj";
+as names = "plane", "capsule", "cow", "dragon", "bunny", "suzanne", "spot", "nefertiti", "richtofen", "teapot", "cube", "trenchgun", "zebra";
