@@ -54,10 +54,10 @@ struct {
 struct {
 	ktga_t textures[STORAGE_MAX_TEXTURES];
 	unsigned long long int textures_count;
-	unsigned long long int texture_hashes[STORAGE_MAX_TEXTURES];
+	kgfw_hash_t texture_hashes[STORAGE_MAX_TEXTURES];
 	kgfw_graphics_mesh_t meshes[STORAGE_MAX_MESHES];
 	unsigned long long int meshes_count;
-	unsigned long long int mesh_hashes[STORAGE_MAX_MESHES];
+	kgfw_hash_t mesh_hashes[STORAGE_MAX_MESHES];
 } static storage = {
 	{ 0 },
 	0,
@@ -590,13 +590,13 @@ static void textures_cleanup(void) {
 
 		ktga_destroy(&storage.textures[i]);
 		memset(&storage.textures[i], 0, sizeof(ktga_t));
-		memset(&storage.texture_hashes[i], 0, sizeof(unsigned long long int));
+		memset(&storage.texture_hashes[i], 0, sizeof(kgfw_hash_t));
 	}
 	storage.textures_count = 0;
 }
 
 static ktga_t * texture_get(char * name) {
-	unsigned long long int hash = kgfw_hash(name);
+	kgfw_hash_t hash = kgfw_hash(name);
 	for (unsigned long long int i = 0; i < storage.textures_count; ++i) {
 		if (hash == storage.texture_hashes[i]) {
 			return &storage.textures[i];
@@ -776,7 +776,7 @@ static void meshes_cleanup(void) {
 }
 
 static kgfw_graphics_mesh_t * mesh_get(char * name) {
-	unsigned long long int hash = kgfw_hash(name);
+	kgfw_hash_t hash = kgfw_hash(name);
 	for (unsigned long long int i = 0; i < storage.meshes_count; ++i) {
 		if (hash == storage.mesh_hashes[i]) {
 			return &storage.meshes[i];

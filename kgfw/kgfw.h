@@ -11,6 +11,8 @@
 #include "kgfw_input.h"
 #include "kgfw_log.h"
 #include "kgfw_time.h"
+#include "kgfw_transform.h"
+#include "kgfw_uuid.h"
 #include "kgfw_window.h"
 
 #include "kgfw_defines.h"

@@ -2,26 +2,39 @@
 #define KRISVERS_KGFW_ECS_H
 
 #include "kgfw_defines.h"
+#include "kgfw_uuid.h"
+#include "kgfw_hash.h"
+#include "kgfw_transform.h"
 
-#define KGFW_DEFAULT_COMPONENT_STATE_MEMBERS unsigned long long int size;
+typedef struct kgfw_component {
+	/* component-system type id, to be the same as the system which acts unto this component */
+	kgfw_uuid_t type_id;
+	void (*update)(struct kgfw_component * this);
+	void (*start)(struct kgfw_component * this);
+} kgfw_component_t;
 
-#define KGFW_DEFAULT_COMPONENT_MEMBERS unsigned long long int size;	\
-	int (*init)(void * self, void * state);							\
-	int (*update)(void * self, void * state);
+typedef struct kgfw_system {
+	/* component-system type id, to be the same as the component which this system acts unto */
+	kgfw_uuid_t type_id;
+	void (*update)(struct kgfw_system * this, unsigned long long int components_count, kgfw_component_t * components);
+	void (*start)(struct kgfw_system * this, unsigned long long int components_count, kgfw_component_t * components);
+} kgfw_system_t;
 
-typedef struct kgfw_ecs_component {
-	KGFW_DEFAULT_COMPONENT_MEMBERS
-} kgfw_ecs_component_t;
+typedef unsigned long long int kgfw_component_handle_t;
+typedef struct kgfw_component_collection {
+	unsigned long long int components_count;
+	kgfw_component_handle_t * components;
+} kgfw_component_collection_t;
 
-typedef struct kgfw_ecs_component_state {
-	KGFW_DEFAULT_COMPONENT_STATE_MEMBERS
-} kgfw_ecs_component_state_t;
+typedef struct kgfw_entity {
+	kgfw_uuid_t id;
+	/* heap-allocated c-string owned by ECS system */
+	const char * name;
+	kgfw_transform_t transform;
+	kgfw_component_collection_t components;
+} kgfw_entity_t;
 
-/* returns ID of successfully registered component and returns zero on failure */
-KGFW_PUBLIC unsigned long long int kgfw_ecs_register(kgfw_ecs_component_t * component, const char * name);
-KGFW_PUBLIC unsigned long long int kgfw_ecs_fetch_id(const char * name);
-KGFW_PUBLIC void * kgfw_ecs_get(unsigned long long int id);
-KGFW_PUBLIC void kgfw_ecs_cleanup(void);
-KGFW_PUBLIC void kgfw_ecs_update(void);
+const char * kgfw_entity_get_name(kgfw_entity_t * this);
+const char * kgfw_component_get_name(kgfw_component_t * this);
 
 #endif

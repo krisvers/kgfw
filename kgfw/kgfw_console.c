@@ -13,11 +13,11 @@ static int help_command(int argc, char ** argv);
 #define VAR_NUM 512
 
 static kgfw_console_command_callback commands[COMMAND_NUM];
-static unsigned long long int command_hashes[COMMAND_NUM];
+static kgfw_hash_t command_hashes[COMMAND_NUM];
 static char * command_names[COMMAND_NUM];
 static unsigned long long int commands_length = 0;
 
-static unsigned long long int console_var_hashes[VAR_NUM];
+static kgfw_hash_t console_var_hashes[VAR_NUM];
 static char * console_vars[VAR_NUM];
 static unsigned long long int console_vars_length = 0;
 
@@ -45,7 +45,7 @@ int kgfw_console_run(int argc, char ** argv) {
 	if (argc < 1) {
 		return 1;
 	}
-	unsigned long long int hash = kgfw_hash(argv[0]);
+	kgfw_hash_t hash = kgfw_hash(argv[0]);
 	for (unsigned long long int i = 0; i < commands_length; ++i) {
 		if (command_hashes[i] == hash) {
 			if (commands[i] != NULL) {
@@ -78,7 +78,7 @@ int kgfw_console_register_command(char * name, kgfw_console_command_callback com
 }
 
 char * kgfw_console_var(char * name) {
-	unsigned long long int hash = kgfw_hash(name);
+	kgfw_hash_t hash = kgfw_hash(name);
 
 	for (unsigned long long int i = 0; i < console_vars_length; ++i) {
 		if (console_var_hashes[i] == hash) {
@@ -119,14 +119,14 @@ int kgfw_console_create_var(char * name, char * value) {
 
 	console_vars[console_vars_length++] = p;
 
-	unsigned long long int hash = kgfw_hash(name);
+	kgfw_hash_t hash = kgfw_hash(name);
 	console_var_hashes[console_vars_length - 1] = hash;
 
 	return 0;
 }
 
 int kgfw_console_set_var(char * name, char * value) {
-	unsigned long long int hash = kgfw_hash(name);
+	kgfw_hash_t hash = kgfw_hash(name);
 
 	for (unsigned long long int i = 0; i < console_vars_length; ++i) {
 		if (console_var_hashes[i] == hash) {

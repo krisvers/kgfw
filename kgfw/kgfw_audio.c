@@ -29,7 +29,7 @@ struct {
 	} listener;
 	struct {
 		ALuint * bo;
-		unsigned long long int * names;
+		kgfw_hash_t * names;
 		unsigned long long int length;
 	} buffers;
 } static state;
@@ -113,7 +113,7 @@ int kgfw_audio_init(void) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to alloc audio buffers");
 			return 1;
 		}
-		state.buffers.names = malloc(sizeof(unsigned long long int) * files->data.array.length);
+		state.buffers.names = malloc(sizeof(kgfw_hash_t) * files->data.array.length);
 		if (state.buffers.names == NULL) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "failed to alloc audio buffers");
 			return 1;
@@ -210,7 +210,7 @@ int kgfw_audio_init(void) {
 }
 
 int kgfw_audio_load(char * filename, char * name) {
-	unsigned long long int hash = kgfw_hash(name);
+	kgfw_hash_t hash = kgfw_hash(name);
 	for (unsigned long long int i = 0; i < state.buffers.length; ++i) {
 		if (state.buffers.names[i] == hash) {
 			return -1;
@@ -232,12 +232,12 @@ int kgfw_audio_load(char * filename, char * name) {
 	}
 
 	if (state.buffers.names == NULL) {
-		state.buffers.names = malloc(sizeof(unsigned long long int) * state.buffers.length);
+		state.buffers.names = malloc(sizeof(kgfw_hash_t) * state.buffers.length);
 		if (state.buffers.names == NULL) {
 			return 3;
 		}
 	} else {
-		unsigned long long int * p = realloc(state.buffers.names, sizeof(unsigned long long int) * state.buffers.length);
+		kgfw_hash_t * p = realloc(state.buffers.names, sizeof(kgfw_hash_t) * state.buffers.length);
 		if (p == NULL) {
 			return 4;
 		}
@@ -337,7 +337,7 @@ void kgfw_audio_update(void) {
 }
 
 int kgfw_audio_play_sound(char * name, float x, float y, float z, float gain, float pitch, unsigned char loop, unsigned char relative) {
-	unsigned long long int hash = kgfw_hash(name);
+	kgfw_hash_t hash = kgfw_hash(name);
 	unsigned long long int bo = 0;
 	for (unsigned long long int i = 0; i < state.buffers.length; ++i) {
 		if (hash == state.buffers.names[i]) {

@@ -4,6 +4,8 @@
 
 #include "kgfw.h"
 #include <GLFW/glfw3.h>
+#include <time.h>
+#include <stdlib.h>
 
 static void glfw_error(int error, const char * desc);
 
@@ -14,6 +16,8 @@ int kgfw_init(void) {
 		return 1;
 	}
 	glfwSetTime(0);
+
+	srand(time(NULL));
 
 	return 0;
 }

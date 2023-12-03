@@ -3,7 +3,9 @@
 
 #include "kgfw_defines.h"
 
-KGFW_PUBLIC unsigned long long int kgfw_hash(char * string);
-KGFW_PUBLIC unsigned long long int kgfw_hash_length(char * string, unsigned long long int length);
+typedef unsigned long long int kgfw_hash_t;
+
+KGFW_PUBLIC kgfw_hash_t kgfw_hash(char * string);
+KGFW_PUBLIC kgfw_hash_t kgfw_hash_length(char * string, unsigned long long int length);
 
 #endif

@@ -1,7 +1,7 @@
 #include "kgfw_hash.h"
 
-unsigned long long int kgfw_hash(char * string) {
-	unsigned long long int hash = 5381;
+kgfw_hash_t kgfw_hash(char * string) {
+	kgfw_hash_t hash = 5381;
 
 	for (unsigned long long int i = 0; string[i] != '\0'; ++i) {
 		hash = (hash << 5) + hash + string[i];
@@ -10,8 +10,8 @@ unsigned long long int kgfw_hash(char * string) {
 	return hash;
 }
 
-unsigned long long int kgfw_hash_length(char * string, unsigned long long int length) {
-	unsigned long long int hash = 5381;
+kgfw_hash_t kgfw_hash_length(char * string, unsigned long long int length) {
+	kgfw_hash_t hash = 5381;
 
 	for (unsigned long long int i = 0; i < length; ++i) {
 		hash = (hash << 5) + hash + string[i];
