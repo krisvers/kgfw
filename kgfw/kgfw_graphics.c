@@ -2414,7 +2414,6 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 int kgfw_graphics_draw(void) {
 	GL_CALL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
-	/* 0.086, 0.082, 0.090 */
 	GL_CALL(glClearColor(0.086f, 0.082f, 0.090f, 1.0f));
 
 	mat4x4 mvp;

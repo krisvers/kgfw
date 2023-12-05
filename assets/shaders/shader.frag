@@ -14,10 +14,10 @@ out vec4 out_color;
 
 void main() {
 	vec4 tex = texture(unif_texture_color, v_uv);
-	if (tex.a == 0) {
+	vec4 col = mix(vec4((v_normal + 1) / 2, 1), tex, unif_textured_color);
+	if (col.a == 0) {
 		discard;
 	}
-	vec4 col = mix(vec4((v_normal + 1) / 2, 1), tex, unif_textured_color);
 
 	vec3 light_pos = vec3(0, 100, 0);
 	float light_power = 2000;
