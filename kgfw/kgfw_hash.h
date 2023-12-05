@@ -5,7 +5,7 @@
 
 typedef unsigned long long int kgfw_hash_t;
 
-KGFW_PUBLIC kgfw_hash_t kgfw_hash(char * string);
-KGFW_PUBLIC kgfw_hash_t kgfw_hash_length(char * string, unsigned long long int length);
+KGFW_PUBLIC kgfw_hash_t kgfw_hash(const char * string);
+KGFW_PUBLIC kgfw_hash_t kgfw_hash_length(const char * string, unsigned long long int length);
 
 #endif

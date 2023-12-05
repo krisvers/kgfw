@@ -78,19 +78,12 @@ static kgfw_graphics_mesh_t * mesh_get(char * name);
 static int meshes_load(void);
 static void meshes_cleanup(void);
 
-typedef struct player_movement {
-	KGFW_DEFAULT_COMPONENT_MEMBERS
-} player_movement_t;
-
-typedef struct player_movement_state {
-	KGFW_DEFAULT_COMPONENT_STATE_MEMBERS
-	kgfw_camera_t * camera;
-	kgfw_graphics_mesh_node_t * mesh;
-} player_movement_state_t;
-
+/*
 static int player_movement_init(player_movement_t * self, player_movement_state_t * mstate);
 static int player_ortho_movement_update(player_movement_t * self, player_movement_state_t * mstate);
 static int player_movement_update(player_movement_t * self, player_movement_state_t * mstate);
+*/
+
 static int exit_command(int argc, char ** argv);
 static int game_command(int argc, char ** argv);
 
@@ -172,8 +165,49 @@ int main(int argc, char ** argv) {
 		return 5;
 	}
 
+	if (kgfw_ecs_init() != 0) {
+		kgfw_console_deinit();
+		textures_cleanup();
+		kgfw_graphics_deinit();
+		kgfw_audio_deinit();
+		kgfw_window_destroy(&state.window);
+		kgfw_deinit();
+		return 6;
+	}
+
 	kgfw_input_key_register_callback(kgfw_key_handler);
 	kgfw_input_mouse_button_register_callback(kgfw_mouse_button_handle);
+
+	kgfw_entity_t * entity = kgfw_entity_new("bob");
+	if (entity == NULL) {
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity creation failure");
+		return 69420;
+	}
+	entity->transform.pos[1] = 5;
+	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.components_count, entity->components.components);
+
+	entity = kgfw_entity_copy(NULL, entity);
+	if (entity == NULL) {
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity creation failure");
+		return 69420;
+	}
+	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.components_count, entity->components.components);
+
+	entity = kgfw_entity_get(entity->id);
+	if (entity == NULL) {
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity get failure");
+		return 69420;
+	}
+	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.components_count, entity->components.components);
+
+	entity = kgfw_entity_get_via_name("bob");
+	if (entity == NULL) {
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity get failure");
+		return 69420;
+	}
+	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.components_count, entity->components.components);
+
+	/*
 	player_movement_t * mov = NULL;
 	{
 		player_movement_t m = {
@@ -220,6 +254,7 @@ int main(int argc, char ** argv) {
 		kgfw_graphics_mesh_texture(node, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 	skip_load_m:;
 	}
+	*/
 
 	while (!state.window.closed && !state.exit) {
 		kgfw_time_start();
@@ -233,7 +268,7 @@ int main(int argc, char ** argv) {
 			break;
 		}
 
-		kgfw_ecs_update();
+		//kgfw_ecs_update();
 
 		{
 			unsigned int w = state.window.width;
@@ -250,6 +285,7 @@ int main(int argc, char ** argv) {
 
 		kgfw_time_end();
 		
+		/*
 		mov->update(mov, &mov_state);
 		if (mov_state.camera->rot[0] >= 360 || mov_state.camera->rot[0] < 0) {
 			mov_state.camera->rot[0] = fmod(mov_state.camera->rot[0], 360);
@@ -260,6 +296,7 @@ int main(int argc, char ** argv) {
 		if (mov_state.camera->rot[2] >= 360 || mov_state.camera->rot[2] < 0) {
 			mov_state.camera->rot[2] = fmod(mov_state.camera->rot[2], 360);
 		}
+		*/
 
 		kgfw_input_update();
 		kgfw_audio_update();
@@ -269,10 +306,11 @@ int main(int argc, char ** argv) {
 		}
 	}
 
+	kgfw_ecs_deinit();
 	kgfw_console_deinit();
 	meshes_cleanup();
 	textures_cleanup();
-	kgfw_ecs_cleanup();
+	//kgfw_ecs_cleanup();
 	kgfw_graphics_deinit();
 	kgfw_audio_deinit();
 	kgfw_window_destroy(&state.window);
@@ -318,6 +356,7 @@ static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsign
 	return;
 }
 
+/*
 static int player_movement_init(player_movement_t * self, player_movement_state_t * mstate) {
 	return 0;
 }
@@ -489,6 +528,7 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 
 	return 0;
 }
+*/
 
 static int exit_command(int argc, char ** argv) {
 	state.exit = 1;
