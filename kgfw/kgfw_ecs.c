@@ -4,16 +4,6 @@
 #include <string.h>
 #include <stdio.h>
 
-typedef struct {
-	unsigned long long int size;
-	kgfw_component_t * data;
-} components_t;
-
-typedef struct {
-	unsigned long long int size;
-	kgfw_system_t * data;
-} systems_t;
-
 typedef struct entity_node {
 	kgfw_entity_t entity;
 	kgfw_hash_t hash;
@@ -21,18 +11,18 @@ typedef struct entity_node {
 	struct entity_node * prev;
 } entity_node_t;
 
+typedef struct component_node {
+	kgfw_component_t entity;
+	kgfw_hash_t hash;
+	struct component_node * next;
+	struct component_node * prev;
+} component_node_t;
+
 struct {
 	entity_node_t * entities;
-	components_t * components;
-	unsigned long long int components_count;
-	components_t * systems;
-	unsigned long long int systems_count;
+
 } static state = {
 	NULL,
-	NULL,
-	0,
-	NULL,
-	0,
 };
 
 int kgfw_ecs_init(void) {
@@ -112,16 +102,16 @@ kgfw_entity_t * kgfw_entity_copy(const char * name, kgfw_entity_t * source) {
 
 	memcpy(&e->transform, &source->transform, sizeof(kgfw_transform_t));
 
-	e->components.components_count = source->components.components_count;
-	if (e->components.components_count != 0) {
-		e->components.components = malloc(sizeof(kgfw_component_handle_t) * e->components.components_count);
-		if (e->components.components == NULL) {
+	e->components.count = source->components.count;
+	if (e->components.count != 0) {
+		e->components.handles = malloc(sizeof(kgfw_component_handle_t) * e->components.count);
+		if (e->components.handles == NULL) {
 			free((void *) e->name);
 			free(e);
 			return NULL;
 		}
 
-		memcpy(e->components.components, source->components.components, sizeof(kgfw_component_handle_t) * e->components.components_count);
+		memcpy(e->components.handles, source->components.handles, sizeof(kgfw_component_handle_t) * e->components.count);
 	}
 	return e;
 }
@@ -147,6 +137,9 @@ void kgfw_entity_destroy(kgfw_entity_t * entity) {
 		if (state.entities == node) {
 			state.entities = node->next;
 		}
+	}
+	if (node->entity.components.handles != NULL) {
+		free(node->entity.components.handles);
 	}
 	free(node);
 }
