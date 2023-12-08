@@ -7,8 +7,8 @@
 #include "kgfw_transform.h"
 
 typedef struct kgfw_component {
-	void (*update)(struct kgfw_component * this);
-	void (*start)(struct kgfw_component * this);
+	void (*update)(struct kgfw_component * self);
+	void (*start)(struct kgfw_component * self);
 	/* identifier for component instance */
 	kgfw_uuid_t instance_id;
 	/* id for the system type that acts unto this component */
@@ -18,13 +18,13 @@ typedef struct kgfw_component {
 
 /* implementation of an ECS system */
 typedef struct kgfw_system {
-	void (*update)(struct kgfw_system * this, unsigned long long int components_count, kgfw_component_t * components);
-	void (*start)(struct kgfw_system * this, unsigned long long int components_count, kgfw_component_t * components);
+	void (*update)(struct kgfw_system * self, unsigned long long int components_count, kgfw_component_t * components);
+	void (*start)(struct kgfw_system * self, unsigned long long int components_count, kgfw_component_t * components);
 } kgfw_system_t;
 
 typedef struct kgfw_component_collection {
 	unsigned long long int count;
-	kgfw_component_t ** components;
+	kgfw_component_t ** handles;
 } kgfw_component_collection_t;
 
 typedef struct kgfw_entity {

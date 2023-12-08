@@ -87,6 +87,10 @@ static int player_movement_update(player_movement_t * self, player_movement_stat
 static int exit_command(int argc, char ** argv);
 static int game_command(int argc, char ** argv);
 
+/* components */
+static void test_start(kgfw_component_t * self);
+static void test_update(kgfw_component_t * self);
+
 int main(int argc, char ** argv) {
 	kgfw_log_register_callback(kgfw_log_handler);
 	kgfw_logc_register_callback(kgfw_logc_handler);
@@ -184,28 +188,39 @@ int main(int argc, char ** argv) {
 		return 69420;
 	}
 	entity->transform.pos[1] = 5;
-	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.components_count, entity->components.components);
+	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.count, entity->components.handles);
 
 	entity = kgfw_entity_copy(NULL, entity);
 	if (entity == NULL) {
 		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity creation failure");
 		return 69420;
 	}
-	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.components_count, entity->components.components);
+	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.count, entity->components.handles);
 
 	entity = kgfw_entity_get(entity->id);
 	if (entity == NULL) {
 		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity get failure");
 		return 69420;
 	}
-	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.components_count, entity->components.components);
+	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.count, entity->components.handles);
 
 	entity = kgfw_entity_get_via_name("bob");
 	if (entity == NULL) {
 		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity get failure");
 		return 69420;
 	}
-	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.components_count, entity->components.components);
+	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.count, entity->components.handles);
+
+	kgfw_component_t data = {
+		.start = test_start,
+		.update = test_update,
+	};
+	kgfw_uuid_t test_ctype = kgfw_component_construct("test", sizeof(kgfw_component_t), &data, 0);
+	kgfw_component_t * test_component = kgfw_component_new(test_ctype);
+	if (test_component == NULL) {
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "component creation failure");
+		return 69420;
+	}
 
 	/*
 	player_movement_t * mov = NULL;
@@ -943,4 +958,16 @@ static int game_command(int argc, char ** argv) {
 	}
 
 	return 0;
+}
+
+
+/* components */
+static void test_start(kgfw_component_t * self)
+{
+
+}
+
+static void test_update(kgfw_component_t * self)
+{
+
 }

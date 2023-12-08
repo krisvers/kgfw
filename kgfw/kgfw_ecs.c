@@ -11,18 +11,26 @@ typedef struct entity_node {
 	struct entity_node * prev;
 } entity_node_t;
 
-typedef struct component_node {
-	kgfw_component_t entity;
-	kgfw_hash_t hash;
-	struct component_node * next;
-	struct component_node * prev;
-} component_node_t;
+typedef struct component_types {
+	kgfw_uuid_t * ids;
+	void ** datas;
+	unsigned long long int * sizes;
+	const char ** names;
+	unsigned long long int count;
+} component_types_t;
 
 struct {
 	entity_node_t * entities;
-
+	component_types_t component_types;
 } static state = {
 	NULL,
+	{
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		0
+	},
 };
 
 int kgfw_ecs_init(void) {
@@ -33,7 +41,26 @@ void kgfw_ecs_deinit(void) {
 	while (state.entities != NULL) {
 		kgfw_entity_destroy((kgfw_entity_t *) state.entities);
 	}
-	return;
+
+	if (state.component_types.ids != NULL) {
+		free(state.component_types.ids);
+	}
+	if (state.component_types.datas != NULL) {
+		for (unsigned long long int i = 0; i < state.component_types.count; ++i) {
+			free(state.component_types.datas[i]);
+		}
+		free(state.component_types.datas);
+	}
+	if (state.component_types.sizes != NULL) {
+		free(state.component_types.sizes);
+	}
+	if (state.component_types.names != NULL) {
+		for (unsigned long long int i = 0; i < state.component_types.count; ++i) {
+			free((void *) state.component_types.names[i]);
+		}
+		free(state.component_types.names);
+	}
+	state.component_types.count = 0;
 }
 
 kgfw_entity_t * kgfw_entity_new(const char * name) {
@@ -64,7 +91,7 @@ kgfw_entity_t * kgfw_entity_new(const char * name) {
 	e->id = kgfw_uuid_gen();
 
 	if (name == NULL) {
-		int len = snprintf(NULL, 0, "Entity 0x%llx", e->id);
+		unsigned long long int len = snprintf(NULL, 0, "Entity 0x%llx", e->id);
 		if (len < 0) {
 			free(node);
 			return NULL;
@@ -104,14 +131,14 @@ kgfw_entity_t * kgfw_entity_copy(const char * name, kgfw_entity_t * source) {
 
 	e->components.count = source->components.count;
 	if (e->components.count != 0) {
-		e->components.handles = malloc(sizeof(kgfw_component_handle_t) * e->components.count);
+		e->components.handles = malloc(sizeof(kgfw_component_t *) * e->components.count);
 		if (e->components.handles == NULL) {
 			free((void *) e->name);
 			free(e);
 			return NULL;
 		}
 
-		memcpy(e->components.handles, source->components.handles, sizeof(kgfw_component_handle_t) * e->components.count);
+		memcpy(e->components.handles, source->components.handles, sizeof(kgfw_component_t *) * e->components.count);
 	}
 	return e;
 }
@@ -171,6 +198,98 @@ kgfw_entity_t * kgfw_entity_get_via_name(const char * name) {
 
 		if (n->hash == hash) {
 			return &n->entity;
+		}
+	}
+
+	return NULL;
+}
+
+kgfw_uuid_t kgfw_component_construct(const char * name, unsigned long long int component_size, void * component_data, kgfw_uuid_t system_id) {
+	if (component_size == 0 || component_data == NULL) {
+		return 0;
+	}
+
+	kgfw_uuid_t id = 0;
+	while (id == 0) {
+		id = kgfw_uuid_gen();
+	}
+
+	void * data = malloc(component_size);
+	if (data == NULL) {
+		return 0;
+	}
+	void ** datas = realloc(state.component_types.datas, sizeof(void *) * (state.component_types.count + 1) * component_size);
+	if (datas == NULL) {
+		return 0;
+	}
+	state.component_types.datas = datas;
+	state.component_types.datas[state.component_types.count] = data;
+
+	kgfw_uuid_t * ids = realloc(state.component_types.ids, sizeof(kgfw_uuid_t) * (state.component_types.count + 1));
+	if (ids == NULL) {
+		return 0;
+	}
+	state.component_types.ids = ids;
+	state.component_types.ids[state.component_types.count] = id;
+
+	unsigned long long int * sizes = realloc(state.component_types.sizes, sizeof(unsigned long long int) * (state.component_types.count + 1));
+	if (sizes == NULL) {
+		return 0;
+	}
+	state.component_types.sizes = sizes;
+	state.component_types.sizes[state.component_types.count] = component_size;
+
+	const char ** names = realloc(state.component_types.names, sizeof(const char *) * (state.component_types.count + 1));
+	if (names == NULL) {
+		return 0;
+	}
+	state.component_types.names = names;
+
+	const char * n = NULL;
+	if (name == NULL) {
+		unsigned long long int len = snprintf(NULL, 0, "Component 0x%llx", id);
+		if (len < 0) {
+			return 0;
+		}
+
+		n = malloc(sizeof(char) * (len + 1));
+		if (n == NULL) {
+			return 0;
+		}
+		sprintf((char *) n, "Component 0x%llx", id);
+		((char *) n)[len] = '\0';
+	}
+	else {
+		unsigned long long int len = strlen(name);
+		n = malloc(sizeof(char) * (len + 1));
+		if (n == NULL) {
+			return 0;
+		}
+		strncpy((char *) n, name, len);
+		((char *) n)[len] = '\0';
+	}
+
+	state.component_types.names[state.component_types.count] = n;
+	state.component_types.count++;
+
+	return id;
+}
+
+kgfw_component_t * kgfw_component_new(kgfw_uuid_t type_id) {
+	if (state.component_types.count == 0) {
+		return NULL;
+	}
+
+	for (unsigned long long int i = 0; i < state.component_types.count; ++i) {
+		if (state.component_types.ids[i] == type_id) {
+			kgfw_component_t * c = malloc(sizeof(kgfw_component_t));
+			if (c == NULL) {
+				return NULL;
+			}
+
+			memcpy(c, state.component_types.datas[i], sizeof(kgfw_component_t));
+			c->instance_id = kgfw_uuid_gen();
+			return c;
 		}
 	}
 
