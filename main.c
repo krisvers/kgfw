@@ -90,6 +90,7 @@ static int game_command(int argc, char ** argv);
 /* components */
 static void test_start(kgfw_component_t * self);
 static void test_update(kgfw_component_t * self);
+static void test_destroy(kgfw_component_t * self);
 
 int main(int argc, char ** argv) {
 	kgfw_log_register_callback(kgfw_log_handler);
@@ -214,9 +215,19 @@ int main(int argc, char ** argv) {
 	kgfw_component_t data = {
 		.start = test_start,
 		.update = test_update,
+		.destroy = test_destroy,
 	};
+
+	int * list = kgfw_list_new(int);
+	list = kgfw_list_reserve(list, 9);
+	memset(list, 0xFFEEDDCC, sizeof(int) * 9);
+	for (unsigned int i = 0; i < 9; ++i) {
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "%x", list[i]);
+	}
+	kgfw_list_destroy(list);
+
 	kgfw_uuid_t test_ctype = kgfw_component_construct("test", sizeof(kgfw_component_t), &data, 0);
-	kgfw_component_t * test_component = kgfw_component_new(test_ctype);
+	kgfw_component_t * test_component = kgfw_entity_attach_component(entity, test_ctype);
 	if (test_component == NULL) {
 		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "component creation failure");
 		return 69420;
@@ -247,6 +258,7 @@ int main(int argc, char ** argv) {
 	mov_state.mesh = kgfw_graphics_mesh_new(mesh_get("capsule"), NULL);
 
 	mov->init(mov, &mov_state);
+	*/
 
 	{
 		kgfw_graphics_mesh_t * m = mesh_get("teapot");
@@ -269,7 +281,6 @@ int main(int argc, char ** argv) {
 		kgfw_graphics_mesh_texture(node, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
 	skip_load_m:;
 	}
-	*/
 
 	while (!state.window.closed && !state.exit) {
 		kgfw_time_start();
@@ -962,12 +973,14 @@ static int game_command(int argc, char ** argv) {
 
 
 /* components */
-static void test_start(kgfw_component_t * self)
-{
-
+static void test_start(kgfw_component_t * self) {
+	kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "component started %p", self);
 }
 
-static void test_update(kgfw_component_t * self)
-{
+static void test_update(kgfw_component_t * self) {
+	kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "component updated %p", self);
+}
 
+static void test_destroy(kgfw_component_t * self) {
+	kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "component destroyed %p", self);
 }

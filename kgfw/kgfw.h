@@ -10,6 +10,7 @@
 #include "kgfw_hash.h"
 #include "kgfw_input.h"
 #include "kgfw_log.h"
+#include "kgfw_list.h"
 #include "kgfw_time.h"
 #include "kgfw_transform.h"
 #include "kgfw_uuid.h"
