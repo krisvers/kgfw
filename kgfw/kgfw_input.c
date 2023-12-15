@@ -2,6 +2,13 @@
 #include "kgfw_input.h"
 #include "kgfw_log.h"
 
+#ifdef KGFW_WINDOWS
+
+#include <windows.h>
+#include <xinput.h>
+
+#endif
+
 #if (KGFW_OPENGL == 33 || defined(KGFW_VULKAN))
 #include <string.h>
 #include <GLFW/glfw3.h>
@@ -23,6 +30,8 @@ struct {
 	float scroll_y;
 	float prev_mouse_x;
 	float prev_mouse_y;
+
+	kgfw_gamepad_t gamepads[4];
 } static key_state;
 
 static kgfw_input_key_enum glfw_key_to_kgfw(int key);
@@ -294,4 +303,12 @@ void kgfw_input_set_mouse_scroll(float x, float y) {
 	key_state.scroll_x = x;
 	key_state.scroll_y = y;
 }
+#endif
+
+#ifdef KGFW_WINDOWS
+
+kgfw_gamepad_t * kgfw_input_gamepad_get(void) {
+	return NULL;
+}
+
 #endif

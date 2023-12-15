@@ -139,6 +139,22 @@ typedef enum kgfw_input_mouse_button_enum {
 	KGFW_MOUSE_BUTTON_MAX,
 } kgfw_input_mouse_button_enum;
 
+typedef struct kgfw_gamepad_status {
+	float battery;
+	unsigned char connected;
+} kgfw_gamepad_status_t;
+
+typedef struct kgfw_gamepad {
+	unsigned short id;
+	unsigned short buttons;
+	float left_trigger;
+	float right_trigger;
+	float left_stick_x;
+	float left_stick_y;
+	float right_stick_x;
+	float right_stick_y;
+} kgfw_gamepad_t;
+
 /* takes key value and action value (0: immediate keyup, 1: immediate keydown, 2: repeated keydown, 3: repeated keyup) */
 typedef void (*kgfw_input_key_callback)(kgfw_input_key_enum key, unsigned char action);
 
@@ -166,6 +182,8 @@ KGFW_PUBLIC unsigned char kgfw_input_mouse_button(kgfw_input_mouse_button_enum b
 KGFW_PUBLIC int kgfw_input_key_register_callback(kgfw_input_key_callback callback);
 /* register a callback for mouse button input */
 KGFW_PUBLIC int kgfw_input_mouse_button_register_callback(kgfw_input_mouse_button_callback callback);
+
+KGFW_PUBLIC kgfw_gamepad_t * kgfw_input_gamepad_get(void);
 
 KGFW_PUBLIC void kgfw_input_press_key_down(kgfw_input_key_enum key);
 KGFW_PUBLIC void kgfw_input_press_key_up(kgfw_input_key_enum key);
