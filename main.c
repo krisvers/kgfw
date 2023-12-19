@@ -21,20 +21,34 @@ struct {
 		float movement;
 		float arrow_speed;
 		float mouse_speed;
+		float gamepad_sensitivity;
 		float jump_force;
 		float gravity;
+		float fov;
 	} settings;
+
+	kgfw_gamepad_t * gamepad;
 } static state = {
 	{ 0 },
-	{ { 0, 0, 5 }, { 0, 0, 0 }, { 1, 1 }, 90, 0.01f, 1000.0f, 1.3333f, 0 },
+	{
+		{ 0, 0, 5 },
+		{ 0, 0, 0 },
+		{ 1, 1 },
+		90, 0.01f, 1000.0f, 1.3333f, 0, 1,
+		{ 0, 0, 0 },
+	},
 	1, 0,
 	{
-		10.0f,
+		3.0f,
 		90.0f,
 		0.15f,
 		10.0f,
+		10.0f,
 		25.0f,
+		90.0f,
 	},
+
+	.gamepad = NULL,
 };
 
 struct {
@@ -71,18 +85,13 @@ static int kgfw_log_handler(kgfw_log_severity_enum severity, char * string);
 static int kgfw_logc_handler(kgfw_log_severity_enum severity, char character);
 static void kgfw_key_handler(kgfw_input_key_enum key, unsigned char action);
 static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsigned char action);
+static void kgfw_gamepad_handle(kgfw_gamepad_t * gamepad);
 static ktga_t * texture_get(char * name);
 static int textures_load(void);
 static void textures_cleanup(void);
 static kgfw_graphics_mesh_t * mesh_get(char * name);
 static int meshes_load(void);
 static void meshes_cleanup(void);
-
-/*
-static int player_movement_init(player_movement_t * self, player_movement_state_t * mstate);
-static int player_ortho_movement_update(player_movement_t * self, player_movement_state_t * mstate);
-static int player_movement_update(player_movement_t * self, player_movement_state_t * mstate);
-*/
 
 static int exit_command(int argc, char ** argv);
 static int game_command(int argc, char ** argv);
@@ -91,6 +100,25 @@ static int game_command(int argc, char ** argv);
 static void test_start(kgfw_component_t * self);
 static void test_update(kgfw_component_t * self);
 static void test_destroy(kgfw_component_t * self);
+
+typedef struct player {
+	void (*update)(struct player * self);
+	void (*start)(struct player * self);
+	void (*destroy)(struct player * self);
+	/* identifier for component instance */
+	kgfw_uuid_t instance_id;
+	/* id for the component type */
+	kgfw_uuid_t type_id;
+	struct kgfw_entity * entity;
+
+	kgfw_camera_t * camera;
+	kgfw_graphics_mesh_node_t * car;
+	vec3 velocity;
+} player_t;
+
+static void player_start(player_t * self);
+static void player_update(player_t * self);
+static void player_destroy(player_t * self);
 
 int main(int argc, char ** argv) {
 	kgfw_log_register_callback(kgfw_log_handler);
@@ -182,93 +210,44 @@ int main(int argc, char ** argv) {
 
 	kgfw_input_key_register_callback(kgfw_key_handler);
 	kgfw_input_mouse_button_register_callback(kgfw_mouse_button_handle);
+	kgfw_input_gamepad_register_callback(kgfw_gamepad_handle);
 
-	kgfw_entity_t * entity = kgfw_entity_new("bob");
-	if (entity == NULL) {
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity creation failure");
-		return 69420;
+	kgfw_entity_t * player = kgfw_entity_new("player");
+	if (player == NULL) {
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "player entity creation failure");
+		return 99;
 	}
-	entity->transform.pos[1] = 5;
-	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.count, entity->components.handles);
+	kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "p %p", player);
 
-	entity = kgfw_entity_copy(NULL, entity);
-	if (entity == NULL) {
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity creation failure");
-		return 69420;
-	}
-	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.count, entity->components.handles);
-
-	entity = kgfw_entity_get(entity->id);
-	if (entity == NULL) {
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity get failure");
-		return 69420;
-	}
-	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.count, entity->components.handles);
-
-	entity = kgfw_entity_get_via_name("bob");
-	if (entity == NULL) {
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity get failure");
-		return 69420;
-	}
-	kgfw_logf(KGFW_LOG_SEVERITY_INFO, "entity 0x%llx:\n  name: \"%s\"\n  transform:\n    pos:   %f, %f, %f\n    rot:   %f, %f, %f\n    scale: %f, %f, %f\n  components:\n    count: %llu\n    ptr: %016p", entity->id, entity->name, entity->transform.pos[0], entity->transform.pos[1], entity->transform.pos[2], entity->transform.rot[0], entity->transform.rot[1], entity->transform.rot[2], entity->transform.scale[0], entity->transform.scale[1], entity->transform.scale[2], entity->components.count, entity->components.handles);
-
-	kgfw_component_t data = {
-		.start = test_start,
-		.update = test_update,
-		.destroy = test_destroy,
-	};
-
-	int * list = kgfw_list_new(int);
-	list = kgfw_list_reserve(list, 9);
-	memset(list, 0xFFEEDDCC, sizeof(int) * 9);
-	for (unsigned int i = 0; i < 9; ++i) {
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "%x", list[i]);
-	}
-	kgfw_list_destroy(list);
-
-	kgfw_uuid_t test_ctype = kgfw_component_construct("test", sizeof(kgfw_component_t), &data, 0);
-	kgfw_component_t * test_component = kgfw_entity_attach_component(entity, test_ctype);
-	if (test_component == NULL) {
-		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "component creation failure");
-		return 69420;
-	}
-
-	/*
-	player_movement_t * mov = NULL;
+	player_t * player_component = NULL;
+	kgfw_uuid_t pc_id = KGFW_ECS_INVALID_ID;
 	{
-		player_movement_t m = {
-			sizeof(player_movement_t),
-			(int (*)(void *, void *)) player_movement_init,
-			(int (*)(void *, void *)) player_movement_update,
+		player_t p = {
+			.update = player_update,
+			.start = player_start,
+			.destroy = player_destroy,
+			.instance_id = 0,
+			.type_id = 0,
+			.entity = NULL,
+			.camera = NULL,
 		};
 
-		if (state.camera.ortho) {
-			m.update = (int (*)(void *, void *)) player_ortho_movement_update;
-			state.camera.nplane = 0;
+		pc_id = kgfw_component_construct("player", sizeof(p), &p, 0);
+		if (pc_id == KGFW_ECS_INVALID_ID) {
+			return 99;
 		}
 
-		mov = kgfw_ecs_get(kgfw_ecs_register((kgfw_ecs_component_t *) &m, "player_movement"));
-	}
-
-	player_movement_state_t mov_state = {
-		sizeof(player_movement_state_t),
-		&state.camera,
-	};
-
-	mov_state.mesh = kgfw_graphics_mesh_new(mesh_get("capsule"), NULL);
-
-	mov->init(mov, &mov_state);
-	*/
-
-	{
-		kgfw_graphics_mesh_t * m = mesh_get("teapot");
+		player_component = kgfw_entity_attach_component(player, pc_id);
+		player_component->camera = &state.camera;
+		
+		kgfw_graphics_mesh_t * m = mesh_get("forklift");
 		if (m == NULL) {
-			kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "failed to load test obj");
-			goto skip_load_m;
+			kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "failed to load car obj");
+			return 69420;
 		}
-		kgfw_graphics_mesh_node_t * node = kgfw_graphics_mesh_new(m, NULL);
+		player_component->car = kgfw_graphics_mesh_new(m, NULL);
 
-		ktga_t * tga = texture_get("teapot");
+		ktga_t * tga = texture_get("forklift");
 		kgfw_graphics_texture_t tex = {
 			.bitmap = tga->bitmap,
 			.width = tga->header.img_w,
@@ -278,9 +257,43 @@ int main(int argc, char ** argv) {
 			.v_wrap = KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
 			.filtering = KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
 		};
-		kgfw_graphics_mesh_texture(node, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+		kgfw_graphics_mesh_texture(player_component->car, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);
+	}
+
+	kgfw_graphics_mesh_node_t * racetrack = NULL;
+	{
+		kgfw_graphics_mesh_t * m = mesh_get("racetrack");
+		if (m == NULL) {
+			kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "failed to load test obj");
+			goto skip_load_m;
+		}
+		kgfw_graphics_mesh_node_t * node = kgfw_graphics_mesh_new(m, NULL);
+
+		/*ktga_t * tga = texture_get("racetrack");
+		kgfw_graphics_texture_t tex = {
+			.bitmap = tga->bitmap,
+			.width = tga->header.img_w,
+			.height = tga->header.img_h,
+			.fmt = KGFW_GRAPHICS_TEXTURE_FORMAT_BGRA,
+			.u_wrap = KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
+			.v_wrap = KGFW_GRAPHICS_TEXTURE_WRAP_CLAMP,
+			.filtering = KGFW_GRAPHICS_TEXTURE_FILTERING_NEAREST,
+		};
+		kgfw_graphics_mesh_texture(node, &tex, KGFW_GRAPHICS_TEXTURE_USE_COLOR);*/
+		racetrack = node;
 	skip_load_m:;
 	}
+
+	kgfw_input_update();
+	state.gamepad = kgfw_input_gamepad_get(0);
+	if (state.gamepad == NULL) {
+		kgfw_logf(KGFW_LOG_SEVERITY_WARN, "no gamepad found");
+		state.gamepad = kgfw_input_gamepad_get(1);
+	}
+	state.gamepad->deadzone.lx = 0.20f;
+	state.gamepad->deadzone.ly = 0.20f;
+	state.gamepad->deadzone.rx = 0.20f;
+	state.gamepad->deadzone.ry = 0.20f;
 
 	while (!state.window.closed && !state.exit) {
 		kgfw_time_start();
@@ -293,8 +306,6 @@ int main(int argc, char ** argv) {
 			state.exit = 1;
 			break;
 		}
-
-		//kgfw_ecs_update();
 
 		{
 			unsigned int w = state.window.width;
@@ -310,21 +321,18 @@ int main(int argc, char ** argv) {
 		}
 
 		kgfw_time_end();
-		
-		/*
-		mov->update(mov, &mov_state);
-		if (mov_state.camera->rot[0] >= 360 || mov_state.camera->rot[0] < 0) {
-			mov_state.camera->rot[0] = fmod(mov_state.camera->rot[0], 360);
-		}
-		if (mov_state.camera->rot[1] >= 360 || mov_state.camera->rot[1] < 0) {
-			mov_state.camera->rot[1] = fmod(mov_state.camera->rot[1], 360);
-		}
-		if (mov_state.camera->rot[2] >= 360 || mov_state.camera->rot[2] < 0) {
-			mov_state.camera->rot[2] = fmod(mov_state.camera->rot[2], 360);
-		}
-		*/
+		kgfw_ecs_update();
 
 		kgfw_input_update();
+		if (!state.gamepad->status.connected) {
+			kgfw_gamepad_t * g = kgfw_input_gamepad_get(0);
+			if (g == NULL) {
+				//kgfw_logf(KGFW_LOG_SEVERITY_WARN, "no controllers connected");
+			} else {
+				state.gamepad = g;
+			}
+		}
+
 		kgfw_audio_update();
 		kgfw_time_end();
 		if (state.input) {
@@ -382,11 +390,59 @@ static void kgfw_mouse_button_handle(kgfw_input_mouse_button_enum button, unsign
 	return;
 }
 
-/*
-static int player_movement_init(player_movement_t * self, player_movement_state_t * mstate) {
-	return 0;
+static void kgfw_gamepad_handle(kgfw_gamepad_t * gamepad) {
+	if (!gamepad->status.connected) {
+		kgfw_logf(KGFW_LOG_SEVERITY_INFO, "controller %u disconnected", gamepad->id);
+	}
+
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_A)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "a pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_B)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "b pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_X)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "x pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_Y)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "y pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_START)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "start pressed");
+		state.input = !state.input;
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_BACK)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "back pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_LTHUMB)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "lthumb pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_RTHUMB)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "rthumb pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_LBUMPER)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "lbumper pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_RBUMPER)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "rbumper pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_DPAD_UP)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "dpad up pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_DPAD_DOWN)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "dpad down pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_DPAD_LEFT)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "dpad left pressed");
+	}
+	if (kgfw_input_gamepad_pressed(gamepad, KGFW_GAMEPAD_DPAD_RIGHT)) {
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "dpad right pressed");
+	}
+
+	//kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "rt %f lt %f", gamepad->left_trigger, gamepad->right_trigger);
 }
 
+/*
 static int player_ortho_movement_update(player_movement_t * self, player_movement_state_t * mstate) {
 	if (kgfw_input_mouse_button(KGFW_MOUSE_LBUTTON)) {
 		float sx, sy;
@@ -441,120 +497,7 @@ static int player_ortho_movement_update(player_movement_t * self, player_movemen
 	}
 
 	return 0;
-}
-
-static int player_movement_update(player_movement_t * self, player_movement_state_t * mstate) {
-	if (!state.input) {
-		return 0;
-	}
-
-	float move_speed = state.settings.movement;
-	float move_fast_speed = state.settings.movement * 5.0f;
-	float move_slow_speed = state.settings.movement / 5.0f;
-	float look_sensitivity = state.settings.arrow_speed;
-	float look_slow_sensitivity = state.settings.arrow_speed / 4.0f;
-	float mouse_sensitivity = state.settings.mouse_speed;
-	float jump_force = state.settings.jump_force;
-	float delta = kgfw_time_delta();
-
-	if (kgfw_input_key(
-	#ifndef KGFW_APPLE_MACOS
-		KGFW_KEY_LCONTROL
-	#else
-		KGFW_KEY_LALT
-	#endif
-	)) {
-		move_speed = move_slow_speed;
-		look_sensitivity = look_slow_sensitivity;
-	}
-
-	if (kgfw_input_key(KGFW_KEY_LSHIFT)) {
-		move_speed = move_fast_speed;
-	}
-
-	if (kgfw_input_key(KGFW_KEY_RIGHT)) {
-		player.rot[1] += look_sensitivity * delta;
-	}
-	if (kgfw_input_key(KGFW_KEY_LEFT)) {
-		player.rot[1] -= look_sensitivity * delta;
-	}
-	if (kgfw_input_key(KGFW_KEY_UP)) {
-		player.rot[0] += look_sensitivity * delta;
-	}
-	if (kgfw_input_key(KGFW_KEY_DOWN)) {
-		player.rot[0] -= look_sensitivity * delta;
-	}
-
-	float dx, dy;
-	kgfw_input_mouse_delta(&dx, &dy);
-	player.rot[0] += dy * mouse_sensitivity;
-	player.rot[1] -= dx * mouse_sensitivity;
-
-	if (player.rot[0] > 90) {
-		player.rot[0] = 90;
-	}
-	if (player.rot[0] < -90) {
-		player.rot[0] = -90;
-	}
-
-	vec3 up;
-	vec3 right;
-	vec3 forward;
-	up[0] = 0; up[1] = 1; up[2] = 0;
-	right[0] = 0; right[1] = 0; right[2] = 0;
-	forward[0] = -sinf(player.rot[1] * 3.141592f / 180.0f); forward[1] = 0; forward[2] = cosf(player.rot[1] * 3.141592f / 180.0f);
-	vec3_mul_cross(right, up, forward);
-	vec3_scale(up, up, move_speed * delta);
-	vec3_scale(right, right, move_speed * delta);
-	vec3_scale(forward, forward, -move_speed * delta);
-
-	if (kgfw_input_key(KGFW_KEY_W)) {
-		vec3_add(player.pos, player.pos, forward);
-	}
-	if (kgfw_input_key(KGFW_KEY_S)) {
-		vec3_sub(player.pos, player.pos, forward);
-	}
-	if (kgfw_input_key(KGFW_KEY_D)) {
-		vec3_add(player.pos, player.pos, right);
-	}
-	if (kgfw_input_key(KGFW_KEY_A)) {
-		vec3_sub(player.pos, player.pos, right);
-	}
-	if (kgfw_input_key(KGFW_KEY_E)) {
-		vec3_add(player.pos, player.pos, up);
-	}
-	if (kgfw_input_key(KGFW_KEY_Q)) {
-		vec3_sub(player.pos, player.pos, up);
-	}
-	if (kgfw_input_key_down(KGFW_KEY_SPACE)) {
-		player.vel[1] = jump_force;
-	}
-
-	if (player.pos[1] <= 0) {
-		player.vel[1] = 0;
-		player.pos[1] = 0;
-	} else {
-		player.vel[1] -= state.settings.gravity;
-	}
-
-	player.pos[0] += player.vel[0];
-	player.pos[1] += player.vel[1];
-	player.pos[2] += player.vel[2];
-
-	mstate->camera->pos[0] = player.pos[0];
-	mstate->camera->pos[1] = player.pos[1] + 4;
-	mstate->camera->pos[2] = player.pos[2];
-	mstate->camera->rot[0] = player.rot[0];
-	mstate->camera->rot[1] = player.rot[1];
-	mstate->camera->rot[2] = player.rot[2];
-
-	mstate->mesh->transform.pos[0] = player.pos[0];
-	mstate->mesh->transform.pos[1] = player.pos[1];
-	mstate->mesh->transform.pos[2] = player.pos[2];
-
-	return 0;
-}
-*/
+}*/
 
 static int exit_command(int argc, char ** argv) {
 	state.exit = 1;
@@ -953,8 +896,9 @@ static int game_command(int argc, char ** argv) {
 		state.settings.gravity = f;
 	} else if (strcmp(argv[1], "pos") == 0) {
 		if (argc < 5) {
-			const char * args = "[pos]";
-			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
+			kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "x: %f, y: %f, z: %f", player.pos[0], player.pos[1], player.pos[2]);
+			//const char * args = "[pos]";
+			//kgfw_logf(KGFW_LOG_SEVERITY_CONSOLE, "arguments: %s", args);
 			return 0;
 		}
 
@@ -973,14 +917,96 @@ static int game_command(int argc, char ** argv) {
 
 
 /* components */
-static void test_start(kgfw_component_t * self) {
-	kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "component started %p", self);
+static void player_start(player_t * self) {
+	self->entity->transform.pos[1] = 2;
+
+	return;
 }
 
-static void test_update(kgfw_component_t * self) {
-	kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "component updated %p", self);
+static void player_update(player_t * self) {
+	if (!state.input) {
+		return;
+	}
+
+	float move_speed = state.settings.movement;
+	float move_fast_speed = state.settings.movement * 5.0f;
+	float move_slow_speed = state.settings.movement / 5.0f;
+	float look_sensitivity = state.settings.arrow_speed;
+	float look_slow_sensitivity = state.settings.arrow_speed / 4.0f;
+	float mouse_sensitivity = state.settings.mouse_speed;
+	float jump_force = state.settings.jump_force;
+	float delta = kgfw_time_delta();
+	float c_forcedrag = 0.925f;
+	float c_drag = 0.99f;
+
+	vec3 up;
+	vec3 right;
+	vec3 forward;
+
+	up[0] = 0; up[1] = 1; up[2] = 0;
+	right[0] = 0; right[1] = 0; right[2] = 0;
+	forward[0] = -sinf(self->entity->transform.rot[1] * 3.141592f / 180.0f); forward[1] = 0; forward[2] = cosf(self->entity->transform.rot[1] * 3.141592f / 180.0f);
+	vec3_mul_cross(right, up, forward);
+
+	vec3 t = { self->velocity[0] * forward[0], self->velocity[1] * forward[1], self->velocity[2] * forward[2] };
+	self->entity->transform.rot[1] += state.settings.gamepad_sensitivity * 20 * state.gamepad->left_stick_x * (vec3_len(t) + 0.05f) * 4 * delta;
+	self->entity->transform.rot[1] += (kgfw_input_key(KGFW_KEY_D) - kgfw_input_key(KGFW_KEY_A)) * 200 * (vec3_len(t) + 0.05f) * 4 * delta;
+	//self->entity->transform.rot[0] += state.settings.gamepad_sensitivity * 20 * delta * state.gamepad->right_stick_y;
+
+	vec3 normal;
+	vec3_norm(normal, forward);
+	vec3 movement;
+
+	float brake = max(state.gamepad->left_trigger, (float) kgfw_input_key(KGFW_KEY_S));
+	float gas = max(state.gamepad->right_trigger, (float) kgfw_input_key(KGFW_KEY_W));
+
+	kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "%f %f", state.gamepad->left_trigger, state.gamepad->right_trigger);
+
+	vec3_scale(movement, normal, -move_speed * (gas - (brake / 6)));
+
+	vec3 drag;
+	memcpy(&drag, &movement, sizeof(vec3));
+	vec3_scale(drag, drag, -c_forcedrag);
+
+	vec3 fin;
+	vec3_add(fin, movement, drag);
+	vec3_scale(fin, fin, delta);
+
+	vec3_add(self->velocity, self->velocity, fin);
+	vec3_scale(self->velocity, self->velocity, c_drag);
+	vec3_scale(self->velocity, self->velocity, 1 - (brake / 100));
+
+	vec3_add(self->entity->transform.pos, self->entity->transform.pos, self->velocity);
+
+	self->camera->focus[0] = self->entity->transform.pos[0];
+	self->camera->focus[1] = self->entity->transform.pos[1] + 0.5f;
+	self->camera->focus[2] = self->entity->transform.pos[2];
+	vec4 cam_pos = { -sinf(self->entity->transform.rot[1] * 3.141592f / 180.0f) * 2, 1.33f, cosf(self->entity->transform.rot[1] * 3.141592f / 180.0f) * 2, 1 };
+
+	kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "%f %f %f %f", cam_pos[0], cam_pos[1], cam_pos[2], cam_pos[3]);
+
+	self->camera->fov = state.settings.fov + vec3_len(self->velocity) * 10;
+
+	self->camera->pos[0] = self->entity->transform.pos[0] + cam_pos[0] - self->velocity[0] * 10;
+	self->camera->pos[1] = self->entity->transform.pos[1] + cam_pos[1] - self->velocity[1] * 10;
+	self->camera->pos[2] = self->entity->transform.pos[2] + cam_pos[2] - self->velocity[2] * 10;
+	self->camera->rot[0] = self->entity->transform.rot[0];
+	self->camera->rot[1] = self->entity->transform.rot[1];
+	self->camera->rot[2] = self->entity->transform.rot[2];
+
+	self->car->transform.pos[0] = self->entity->transform.pos[0];
+	self->car->transform.pos[1] = self->entity->transform.pos[1];
+	self->car->transform.pos[2] = self->entity->transform.pos[2];
+
+	self->car->transform.rot[0] = self->entity->transform.rot[0];
+	self->car->transform.rot[1] = fmod(-self->entity->transform.rot[1], 360);
+	self->car->transform.rot[2] = self->entity->transform.rot[2];
+
+	if (kgfw_input_gamepad_pressed(state.gamepad, KGFW_GAMEPAD_LBUMPER)) {
+		self->camera->rot[1] = fmod(self->camera->rot[1] + 180, 360);
+	}
 }
 
-static void test_destroy(kgfw_component_t * self) {
-	kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "component destroyed %p", self);
+void player_destroy(player_t * self) {
+	return;
 }

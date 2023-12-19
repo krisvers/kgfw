@@ -53,6 +53,7 @@ typedef void (*kgfw_component_update_f)(struct kgfw_component * self);
 KGFW_PUBLIC int kgfw_ecs_init(void);
 KGFW_PUBLIC void kgfw_ecs_deinit(void);
 KGFW_PUBLIC void kgfw_ecs_update(void);
+
 /* if name == NULL, the name of the entity will be "Entity [entity.id]" */
 KGFW_PUBLIC kgfw_entity_t * kgfw_entity_new(const char * name);
 /* if name == NULL, the name of the entity will be "Entity [entity.id]" */
@@ -60,7 +61,8 @@ KGFW_PUBLIC kgfw_entity_t * kgfw_entity_copy(const char * name, kgfw_entity_t * 
 KGFW_PUBLIC void kgfw_entity_destroy(kgfw_entity_t * entity);
 KGFW_PUBLIC kgfw_entity_t * kgfw_entity_get(kgfw_uuid_t id);
 KGFW_PUBLIC kgfw_entity_t * kgfw_entity_get_via_name(const char * name);
-KGFW_PUBLIC kgfw_component_t * kgfw_entity_get_component(kgfw_uuid_t type_id);
+KGFW_PUBLIC kgfw_component_t * kgfw_entity_get_component(kgfw_entity_t * entity, kgfw_uuid_t type_id);
+
 /*
 	default component system_id is 0 (only update, start, and destroy function pointers)
 	returns KGFW_ECS_INVALID_ID on error

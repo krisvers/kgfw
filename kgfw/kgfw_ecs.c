@@ -66,15 +66,54 @@ struct {
 	},
 };
 
+/* default system */
+static int default_system_construct(const char * name, unsigned long long int system_size, void * system_data);
+
+static void default_system_update(struct kgfw_system * self, kgfw_component_node_t * components) {
+	for (kgfw_component_node_t * n = components; n != NULL; n = n->next) {
+		n->component->update(n->component);
+	}
+}
+
+static void default_system_start(struct kgfw_system * self, kgfw_component_node_t * components) {
+	for (kgfw_component_node_t * n = components; n != NULL; n = n->next) {
+		n->component->start(n->component);
+	}
+}
+
+static void default_system_destroy(struct kgfw_system * self) {
+	return;
+}
+
 int kgfw_ecs_init(void) {
+	kgfw_system_t * default_system = malloc(sizeof(kgfw_system_t));
+	if (default_system == NULL) {
+		return 1;
+	}
+
+	memset(default_system, 0, sizeof(kgfw_system_t));
+	default_system->update = default_system_update;
+	default_system->start = default_system_start;
+	default_system->destroy = default_system_destroy;
+
+	if (default_system_construct("default", sizeof(kgfw_system_t), default_system) != 0) {
+		free(default_system);
+		return 2;
+	}
+
 	return 0;
 }
 
 void kgfw_ecs_deinit(void) {
 	for (unsigned long long int i = 0; i < state.component_types.count; ++i) {
-		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "type %llu: %p", i, state.components[i]);
+		component_node_t * prev = state.components[i];
 		while (state.components[i] != NULL) {
 			kgfw_component_destroy(state.components[i]->component);
+			if (state.components[i] == prev) {
+				kgfw_logf(KGFW_LOG_SEVERITY_WARN, "ecs component deinitialization failed, skipping");
+				break;
+			}
+			prev = state.components[i];
 		}
 	}
 
@@ -135,7 +174,7 @@ void kgfw_ecs_update(void) {
 		unsigned long long int comp_index = 0;
 		for (unsigned long long int j = 0; j < state.component_types.count; ++j) {
 			if (state.component_types.system_ids[j] == state.systems.ids[i]) {
-				state.systems.datas[i]->update(state.systems.datas[i], (kgfw_component_node_t *) state.components[comp_index]);
+				state.systems.datas[i]->update(state.systems.datas[i], (kgfw_component_node_t *) state.components[j]);
 				break;
 			}
 		}
@@ -276,6 +315,20 @@ kgfw_entity_t * kgfw_entity_get_via_name(const char * name) {
 	return NULL;
 }
 
+kgfw_component_t * kgfw_entity_get_component(kgfw_entity_t * entity, kgfw_uuid_t type_id) {
+	if (entity == NULL) {
+		return NULL;
+	}
+
+	for (kgfw_component_node_t * n = entity->components.handles; n != NULL; n = n->next) {
+		if (n->component->type_id == type_id) {
+			return n->component;
+		}
+	}
+
+	return NULL;
+}
+
 kgfw_uuid_t kgfw_component_construct(const char * name, unsigned long long int component_size, void * component_data, kgfw_uuid_t system_id) {
 	if (component_size == 0 || component_data == NULL) {
 		return 0;
@@ -284,6 +337,7 @@ kgfw_uuid_t kgfw_component_construct(const char * name, unsigned long long int c
 	kgfw_uuid_t id = 0;
 	while (id == KGFW_ECS_INVALID_ID) {
 		id = kgfw_uuid_gen();
+		kgfw_logf(KGFW_LOG_SEVERITY_DEBUG, "id: 0x%llx", id);
 	}
 
 	void * data = malloc(component_size);
@@ -381,13 +435,7 @@ kgfw_component_t * kgfw_entity_attach_component(kgfw_entity_t * entity, kgfw_uui
 				return NULL;
 			}
 
-			if (state.components[i] == NULL) {
-				state.components[i] = node;
-			} else {
-				node->next = state.components[i];
-				state.components[i] = node;
-			}
-
+			memset(node, 0, sizeof(component_node_t));
 			node->component = malloc(state.component_types.sizes[i]);
 			if (node->component == NULL) {
 				free(node);
@@ -395,6 +443,15 @@ kgfw_component_t * kgfw_entity_attach_component(kgfw_entity_t * entity, kgfw_uui
 			}
 			memcpy(node->component, state.component_types.datas[i], state.component_types.sizes[i]);
 
+			if (state.components[i] == NULL) {
+				state.components[i] = node;
+			}
+			else {
+				node->next = state.components[i];
+				state.components[i] = node;
+			}
+
+			node->component->type_id = type_id;
 			node->component->instance_id = kgfw_uuid_gen();
 			node->component->entity = entity;
 			node->type_index = i;
@@ -404,6 +461,7 @@ kgfw_component_t * kgfw_entity_attach_component(kgfw_entity_t * entity, kgfw_uui
 				return NULL;
 			}
 			cnode->next = entity->components.handles;
+			cnode->component = node->component;
 			entity->components.handles = cnode;
 			++entity->components.count;
 
@@ -420,33 +478,40 @@ void kgfw_component_destroy(kgfw_component_t * component) {
 		return;
 	}
 
-	unsigned long long int type_index;
 	for (unsigned long long int i = 0; i < state.component_types.count; ++i) {
 		if (state.component_types.type_ids[i] == component->type_id) {
-			type_index = i;
-			goto type_found;
+			component_node_t * prev = state.components[i];
+			for (component_node_t * n = state.components[i]; n != NULL; n = n->next) {
+				if (n->component == component) {
+					kgfw_component_node_t * eprev = component->entity->components.handles;
+					for (kgfw_component_node_t * en = component->entity->components.handles; en != NULL; en = en->next) {
+						if (en->component == component) {
+							component->destroy(component);
+
+							if (n == state.components[i]) {
+								state.components[i] = n->next;
+							} else {
+								prev->next = n->next;
+							}
+
+							if (en == component->entity->components.handles) {
+								component->entity->components.handles = en->next;
+							} else {
+								eprev->next = en->next;
+							}
+
+							free(n->component);
+							free(n);
+							free(en);
+							return;
+						}
+						eprev = en;
+					}
+				}
+				prev = n;
+			}
 		}
 	}
-	return;
-
-type_found:;
-
-	kgfw_component_node_t * prev = component->entity->components.handles;
-	kgfw_component_node_t * cnode = component->entity->components.handles;
-	while (cnode->component != component) {
-		prev = cnode;
-		cnode = cnode->next;
-
-		if (cnode == NULL) {
-			return;
-		}
-	}
-	
-	component->destroy(component);
-
-	prev->next = cnode->next;
-	free(cnode);
-	//free(node);
 }
 
 const char * kgfw_component_type_get_name(kgfw_uuid_t type_id) {
@@ -555,4 +620,88 @@ kgfw_uuid_t kgfw_system_construct(const char * name, unsigned long long int syst
 	++state.systems.count;
 
 	return id;
+}
+
+static int default_system_construct(const char * name, unsigned long long int system_size, void * system_data) {
+	if (system_size == 0 || system_data == NULL) {
+		return 1;
+	}
+
+	kgfw_uuid_t id = 0;
+
+	kgfw_system_t * data = malloc(system_size);
+	if (data == NULL) {
+		return 2;
+	}
+	memcpy(data, system_data, system_size);
+	kgfw_system_t ** datas = realloc(state.systems.datas, sizeof(kgfw_system_t *) * (state.systems.count + 1));
+	if (datas == NULL) {
+		return 3;
+	}
+	state.systems.datas = datas;
+	state.systems.datas[state.systems.count] = data;
+
+	kgfw_uuid_t * ids = realloc(state.systems.ids, sizeof(kgfw_uuid_t) * (state.systems.count + 1));
+	if (ids == NULL) {
+		return 4;
+	}
+	state.systems.ids = ids;
+	state.systems.ids[state.systems.count] = id;
+
+	unsigned long long int * sizes = realloc(state.systems.sizes, sizeof(unsigned long long int) * (state.systems.count + 1));
+	if (sizes == NULL) {
+		return 5;
+	}
+	state.systems.sizes = sizes;
+	state.systems.sizes[state.systems.count] = system_size;
+
+	const char ** names = realloc(state.systems.names, sizeof(const char *) * (state.systems.count + 1));
+	if (names == NULL) {
+		return 6;
+	}
+	state.systems.names = names;
+
+	const char * n = NULL;
+	if (name == NULL) {
+		unsigned long long int len = snprintf(NULL, 0, "System 0x%llx", id);
+		if (len < 0) {
+			return 7;
+		}
+
+		n = malloc(sizeof(char) * (len + 1));
+		if (n == NULL) {
+			return 8;
+		}
+		sprintf((char *) n, "System 0x%llx", id);
+		((char *) n)[len] = '\0';
+	}
+	else {
+		unsigned long long int len = strlen(name);
+		n = malloc(sizeof(char) * (len + 1));
+		if (n == NULL) {
+			return 9;
+		}
+		strncpy((char *) n, name, len);
+		((char *) n)[len] = '\0';
+	}
+	state.systems.names[state.systems.count] = n;
+
+	kgfw_hash_t * hashes = realloc(state.systems.hashes, sizeof(kgfw_hash_t) * (state.systems.count + 1));
+	if (hashes == NULL) {
+		return 10;
+	}
+	state.systems.hashes = hashes;
+	state.systems.hashes[state.systems.count] = kgfw_hash(n);
+
+	unsigned long long int comp_index = 0;
+	for (unsigned long long int j = 0; j < state.component_types.count; ++j) {
+		if (state.component_types.system_ids[j] == state.systems.ids[state.systems.count]) {
+			data->start(data, (kgfw_component_node_t *) state.components[comp_index]);
+			break;
+		}
+	}
+
+	++state.systems.count;
+
+	return 0;
 }

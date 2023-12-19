@@ -2398,8 +2398,8 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 	}
 
 	GL_CALL(glEnable(GL_DEPTH_TEST));
-	//GL_CALL(glEnable(GL_FRAMEBUFFER_SRGB));
-	//GL_CALL(glPolygonMode(GL_FRONT_AND_BACK, GL_LINE));
+	GL_CALL(glEnable(GL_FRAMEBUFFER_SRGB));
+	//GL_CALL(glPolygonMode(GL_FRONT_AND_BACK, GL_POINT));
 	GL_CALL(glEnable(GL_BLEND));
 	GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 	//GL_CALL(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));

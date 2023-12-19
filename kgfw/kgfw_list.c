@@ -36,6 +36,14 @@ void * _kgfw_list_reserve(void * list, unsigned long long int capacity) {
 	return (void *) (((unsigned long long int) p) + sizeof(list_t));
 }
 
+void * _kgfw_list_expand_from(void * list, unsigned long long int index) {
+	if (list == NULL) {
+		return NULL;
+	}
+
+	list_t * l = (void *) (((unsigned long long int) list) - sizeof(list_t));
+}
+
 void _kgfw_list_destroy(void * list) {
 	if (list != NULL) {
 		free((void *) (((unsigned long long int) list) - sizeof(list_t)));

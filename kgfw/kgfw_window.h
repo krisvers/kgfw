@@ -6,6 +6,8 @@
 typedef struct kgfw_window {
 	void * internal;
 	unsigned char closed;
+	unsigned char focused;
+	unsigned char disable_gamepad_on_unfocus;
 	unsigned int width;
 	unsigned int height;
 } kgfw_window_t;

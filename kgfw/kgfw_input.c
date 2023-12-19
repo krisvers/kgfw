@@ -2,19 +2,9 @@
 #include "kgfw_input.h"
 #include "kgfw_log.h"
 
-#ifdef KGFW_WINDOWS
-
-#include <windows.h>
-#include <xinput.h>
-
-#endif
-
-#if (KGFW_OPENGL == 33 || defined(KGFW_VULKAN))
-#include <string.h>
-#include <GLFW/glfw3.h>
-
 #define KGFW_KEY_MAX_CALLBACKS 16
 #define KGFW_MOUSE_BUTTON_MAX_CALLBACKS 16
+#define KGFW_GAMEPAD_MAX_CALLBACKS 16
 
 struct {
 	unsigned char keys[KGFW_KEY_MAX];
@@ -22,8 +12,10 @@ struct {
 	unsigned char mouse[KGFW_MOUSE_BUTTON_MAX];
 	kgfw_input_key_callback callbacks[KGFW_KEY_MAX_CALLBACKS];
 	kgfw_input_mouse_button_callback mouse_callbacks[KGFW_MOUSE_BUTTON_MAX_CALLBACKS];
+	kgfw_input_gamepad_callback gamepad_callbacks[KGFW_GAMEPAD_MAX_CALLBACKS];
 	unsigned long long int callback_count;
 	unsigned long long int mouse_callback_count;
+	unsigned long long int gamepad_callback_count;
 	float mouse_x;
 	float mouse_y;
 	float scroll_x;
@@ -31,8 +23,98 @@ struct {
 	float prev_mouse_x;
 	float prev_mouse_y;
 
-	kgfw_gamepad_t gamepads[4];
-} static key_state;
+	unsigned char gamepad_enabled;
+	kgfw_gamepad_t gamepads[KGFW_GAMEPAD_MAX];
+} static key_state = {
+	.gamepad_enabled = 1,
+	.gamepads = {
+		[0] = {
+			.id = 0,
+			.buttons = 0,
+			.left_trigger = 0.0f,
+			.right_trigger = 0.0f,
+			.left_stick_x = 0.0f,
+			.left_stick_y = 0.0f,
+			.right_stick_x = 0.0f,
+			.right_stick_y = 0.0f,
+			.deadzone = {
+				.lx = 0.1f,
+				.ly = 0.1f,
+				.rx = 0.1f,
+				.ry = 0.1f,
+			},
+			.status = {
+				.battery = 0.0f,
+				.connected = 0,
+			},
+		},
+		[1] = {
+			.id = 1,
+			.buttons = 0,
+			.left_trigger = 0.0f,
+			.right_trigger = 0.0f,
+			.left_stick_x = 0.0f,
+			.left_stick_y = 0.0f,
+			.right_stick_x = 0.0f,
+			.right_stick_y = 0.0f,
+			.deadzone = {
+				.lx = 0.1f,
+				.ly = 0.1f,
+				.rx = 0.1f,
+				.ry = 0.1f,
+			},
+			.status = {
+				.battery = 0.0f,
+				.connected = 0,
+			},
+		},
+		[2] = {
+			.id = 2,
+			.buttons = 0,
+			.left_trigger = 0.0f,
+			.right_trigger = 0.0f,
+			.left_stick_x = 0.0f,
+			.left_stick_y = 0.0f,
+			.right_stick_x = 0.0f,
+			.right_stick_y = 0.0f,
+			.deadzone = {
+				.lx = 0.1f,
+				.ly = 0.1f,
+				.rx = 0.1f,
+				.ry = 0.1f,
+			},
+			.status = {
+				.battery = 0.0f,
+				.connected = 0,
+			},
+		},
+		[3] = {
+			.id = 3,
+			.buttons = 0,
+			.left_trigger = 0.0f,
+			.right_trigger = 0.0f,
+			.left_stick_x = 0.0f,
+			.left_stick_y = 0.0f,
+			.right_stick_x = 0.0f,
+			.right_stick_y = 0.0f,
+			.deadzone = {
+				.lx = 0.1f,
+				.ly = 0.1f,
+				.rx = 0.1f,
+				.ry = 0.1f,
+			},
+			.status = {
+				.battery = 0.0f,
+				.connected = 0,
+			},
+		},
+	}
+};
+
+#if (KGFW_OPENGL == 33 || defined(KGFW_VULKAN))
+#include <string.h>
+#include <GLFW/glfw3.h>
+#include <math.h>
 
 static kgfw_input_key_enum glfw_key_to_kgfw(int key);
 static void kgfw_glfw_key(GLFWwindow * window, int key, int scancode, int mods, int action);
@@ -56,7 +138,11 @@ int kgfw_input_register_window(kgfw_window_t * window) {
 }
 
 unsigned char kgfw_input_key(kgfw_input_key_enum key) {
-	return (key_state.keys[key]);
+	if (key_state.keys[key]) {
+		return 1;
+	}
+
+	return 0;
 }
 
 unsigned char kgfw_input_key_down(kgfw_input_key_enum key) {
@@ -76,7 +162,86 @@ void kgfw_input_update(void) {
 	key_state.prev_mouse_y = key_state.mouse_y;
 	key_state.scroll_x = 0;
 	key_state.scroll_y = 0;
-	return;
+
+	for (unsigned short i = 0; i < KGFW_GAMEPAD_MAX; ++i) {
+		GLFWgamepadstate gstate;
+		if (glfwJoystickIsGamepad(i) == GLFW_FALSE) {
+			key_state.gamepads[i].status.connected = 0;
+			key_state.gamepads[i].left_stick_x = 0;
+			key_state.gamepads[i].left_stick_y = 0;
+			key_state.gamepads[i].right_stick_x = 0;
+			key_state.gamepads[i].right_stick_y = 0;
+
+			key_state.gamepads[i].buttons = 0;
+			key_state.gamepads[i].left_trigger = 0;
+			key_state.gamepads[i].right_trigger = 0;
+			key_state.gamepads[i].status.battery = 0;
+			continue;
+		}
+		if (glfwGetGamepadState(i, &gstate)) {
+			if (!key_state.gamepad_enabled) {
+				key_state.gamepads[i].status.connected = 1;
+				goto zero_gamepad_state;
+			}
+
+			float lx = gstate.axes[GLFW_GAMEPAD_AXIS_LEFT_X];
+			float ly = -gstate.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
+			float rx = gstate.axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
+			float ry = -gstate.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y];
+
+			if (fabs(lx) < key_state.gamepads[i].deadzone.lx) {
+				lx = 0;
+			}
+			if (fabs(ly) < key_state.gamepads[i].deadzone.ly) {
+				ly = 0;
+			}
+			if (fabs(rx) < key_state.gamepads[i].deadzone.rx) {
+				rx = 0;
+			}
+			if (fabs(ry) < key_state.gamepads[i].deadzone.ry) {
+				ry = 0;
+			}
+
+			kgfw_gamepad_t gamepad;
+
+			gamepad.left_stick_x = lx;
+			gamepad.left_stick_y = ly;
+			gamepad.right_stick_x = rx;
+			gamepad.right_stick_y = ry;
+
+			gamepad.id = i;
+			gamepad.buttons = ((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_DPAD_UP]) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_DPAD_DOWN]) << 0x01) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_DPAD_LEFT]) << 0x02) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_DPAD_RIGHT]) << 0x03) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_START]) << 0x04) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_BACK]) << 0x05) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_LEFT_THUMB]) << 0x06) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_RIGHT_THUMB]) << 0x07) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER]) << 0x08) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER]) << 0x09) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_A]) << 0xC) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_B]) << 0xD) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_X]) << 0xE) | (((unsigned short) gstate.buttons[GLFW_GAMEPAD_BUTTON_Y]) << 0xF);
+			gamepad.left_trigger = (gstate.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] + 1) / 2.0f;
+			gamepad.right_trigger = (gstate.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] + 1) / 2.0f;
+			gamepad.status.battery = 100;
+			gamepad.status.connected = 1;
+			memcpy(&gamepad.deadzone, &key_state.gamepads[i].deadzone, sizeof(gamepad.deadzone));
+
+			if (memcmp(&gamepad, &key_state.gamepads[i], sizeof(kgfw_gamepad_t)) != 0) {
+				key_state.gamepads[i] = gamepad;
+				for (unsigned long long int j = 0; j < key_state.gamepad_callback_count; ++j) {
+					key_state.gamepad_callbacks[j](&key_state.gamepads[i]);
+				}
+			}
+		}
+		else {
+			key_state.gamepads[i].status.connected = 0;
+			for (unsigned long long int j = 0; j < key_state.gamepad_callback_count; ++j) {
+				key_state.gamepad_callbacks[j](&key_state.gamepads[i]);
+			}
+
+		zero_gamepad_state:
+			key_state.gamepads[i].left_stick_x = 0;
+			key_state.gamepads[i].left_stick_y = 0;
+			key_state.gamepads[i].right_stick_x = 0;
+			key_state.gamepads[i].right_stick_y = 0;
+
+			key_state.gamepads[i].buttons = 0;
+			key_state.gamepads[i].left_trigger = 0;
+			key_state.gamepads[i].right_trigger = 0;
+			key_state.gamepads[i].status.battery = 0;
+		}
+	}
 }
 
 static void kgfw_glfw_key(GLFWwindow * window, int key, int scancode, int action, int mods) {
@@ -167,25 +332,8 @@ int kgfw_input_mouse_button_register_callback(kgfw_input_mouse_button_callback c
 
 #include <string.h>
 #include <windows.h>
-
-#define KGFW_KEY_MAX_CALLBACKS 16
-#define KGFW_MOUSE_BUTTON_MAX_CALLBACKS 16
-
-struct {
-	unsigned char keys[KGFW_KEY_MAX];
-	unsigned char prev_keys[KGFW_KEY_MAX];
-	unsigned char mouse[KGFW_MOUSE_BUTTON_MAX];
-	kgfw_input_key_callback callbacks[KGFW_KEY_MAX_CALLBACKS];
-	kgfw_input_mouse_button_callback mouse_callbacks[KGFW_MOUSE_BUTTON_MAX_CALLBACKS];
-	unsigned long long int callback_count;
-	unsigned long long int mouse_callback_count;
-	float mouse_x;
-	float mouse_y;
-	float scroll_x;
-	float scroll_y;
-	float prev_mouse_x;
-	float prev_mouse_y;
-} static key_state;
+#include <xinput.h>
+#include <math.h>
 
 int kgfw_input_register_window(kgfw_window_t * window) {
 	if (window == NULL) {
@@ -219,7 +367,78 @@ void kgfw_input_update(void) {
 	key_state.prev_mouse_y = key_state.mouse_y;
 	key_state.scroll_x = 0;
 	key_state.scroll_y = 0;
-	return;
+
+	for (unsigned short i = 0; i < KGFW_GAMEPAD_MAX; ++i) {
+		XINPUT_STATE xstate;
+		XINPUT_BATTERY_INFORMATION bat_info;
+		if (XInputGetState(i, &xstate) == ERROR_SUCCESS) {
+			if (!key_state.gamepad_enabled) {
+				key_state.gamepads[i].status.connected = 1;
+				goto zero_gamepad_state;
+			}
+
+			XInputGetBatteryInformation(i, BATTERY_DEVTYPE_GAMEPAD, &bat_info);
+
+			float lx = xstate.Gamepad.sThumbLX / 32767.0f;
+			float ly = xstate.Gamepad.sThumbLY / 32767.0f;
+			float rx = xstate.Gamepad.sThumbRX / 32767.0f;
+			float ry = xstate.Gamepad.sThumbRY / 32767.0f;
+
+			if (fabs(lx) < key_state.gamepads[i].deadzone.lx) {
+				lx = 0;
+			}
+			if (fabs(ly) < key_state.gamepads[i].deadzone.ly) {
+				ly = 0;
+			}
+			if (fabs(rx) < key_state.gamepads[i].deadzone.rx) {
+				rx = 0;
+			}
+			if (fabs(ry) < key_state.gamepads[i].deadzone.ry) {
+				ry = 0;
+			}
+
+			kgfw_gamepad_t gamepad;
+
+			gamepad.left_stick_x = lx;
+			gamepad.left_stick_y = ly;
+			gamepad.right_stick_x = rx;
+			gamepad.right_stick_y = ry;
+
+			gamepad.id = i;
+			gamepad.buttons = xstate.Gamepad.wButtons;
+			gamepad.left_trigger = xstate.Gamepad.bLeftTrigger / 255.0f;
+			gamepad.right_trigger = xstate.Gamepad.bRightTrigger / 255.0f;
+			gamepad.status.battery = bat_info.BatteryLevel / 255.0f;
+			gamepad.status.connected = 1;
+			memcpy(&gamepad.deadzone, &key_state.gamepads[i].deadzone, sizeof(gamepad.deadzone));
+
+			if (memcmp(&gamepad, &key_state.gamepads[i], sizeof(kgfw_gamepad_t)) != 0) {
+				key_state.gamepads[i] = gamepad;
+				for (unsigned long long int j = 0; j < key_state.gamepad_callback_count; ++j) {
+					key_state.gamepad_callbacks[j](&key_state.gamepads[i]);
+				}
+			}
+		} else {
+			if (key_state.gamepads[i].status.connected) {
+				key_state.gamepads[i].status.connected = 0;
+				for (unsigned long long int j = 0; j < key_state.gamepad_callback_count; ++j) {
+					key_state.gamepad_callbacks[j](&key_state.gamepads[i]);
+				}
+			}
+
+		zero_gamepad_state:
+			key_state.gamepads[i].left_stick_x = 0;
+			key_state.gamepads[i].left_stick_y = 0;
+			key_state.gamepads[i].right_stick_x = 0;
+			key_state.gamepads[i].right_stick_y = 0;
+
+			key_state.gamepads[i].id = i;
+			key_state.gamepads[i].buttons = 0;
+			key_state.gamepads[i].left_trigger = 0;
+			key_state.gamepads[i].right_trigger = 0;
+			key_state.gamepads[i].status.battery = 0;
+		}
+	}
 }
 
 void kgfw_input_mouse_delta(float * out_dx, float * out_dy) {
@@ -305,10 +524,43 @@ void kgfw_input_set_mouse_scroll(float x, float y) {
 }
 #endif
 
-#ifdef KGFW_WINDOWS
+kgfw_gamepad_t * kgfw_input_gamepad_get(unsigned int gamepad_id) {
+	if (gamepad_id >= KGFW_GAMEPAD_MAX + 1 || gamepad_id == 0) {
+		for (unsigned short i = 0; i < KGFW_GAMEPAD_MAX; ++i) {
+			if (key_state.gamepads[i].status.connected) {
+				return &key_state.gamepads[i];
+			}
+		}
+		return NULL;
+	}
 
-kgfw_gamepad_t * kgfw_input_gamepad_get(void) {
-	return NULL;
+	return &key_state.gamepads[gamepad_id - 1];
 }
 
-#endif
+unsigned char kgfw_input_gamepad_pressed(kgfw_gamepad_t * gamepad, unsigned short buttons) {
+	if (gamepad->buttons & buttons) {
+		return 1;
+	}
+	return 0;
+}
+
+unsigned char kgfw_input_gamepad_is_enabled(void) {
+	return key_state.gamepad_enabled;
+}
+
+void kgfw_input_gamepad_enable(void) {
+	key_state.gamepad_enabled = 1;
+}
+
+void kgfw_input_gamepad_disable(void) {
+	key_state.gamepad_enabled = 0;
+}
+
+int kgfw_input_gamepad_register_callback(kgfw_input_gamepad_callback callback) {
+	if (callback == NULL) {
+		return 1;
+	}
+
+	key_state.gamepad_callbacks[key_state.gamepad_callback_count++] = callback;
+	return 0;
+}

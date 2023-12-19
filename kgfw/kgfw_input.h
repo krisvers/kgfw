@@ -139,10 +139,40 @@ typedef enum kgfw_input_mouse_button_enum {
 	KGFW_MOUSE_BUTTON_MAX,
 } kgfw_input_mouse_button_enum;
 
+typedef enum kgfw_gamepad_button_enum {
+	KGFW_GAMEPAD_DPAD_UP = 0x01,
+	KGFW_GAMEPAD_DPAD_DOWN = 0x02,
+	KGFW_GAMEPAD_DPAD_LEFT = 0x04,
+	KGFW_GAMEPAD_DPAD_RIGHT = 0x08,
+	KGFW_GAMEPAD_START = 0x10,
+	KGFW_GAMEPAD_BACK = 0x20,
+	KGFW_GAMEPAD_LTHUMB = 0x40,
+	KGFW_GAMEPAD_RTHUMB = 0x80,
+	KGFW_GAMEPAD_LBUMPER = 0x100,
+	KGFW_GAMEPAD_RBUMPER = 0x200,
+	KGFW_GAMEPAD_A = 0x1000,
+	KGFW_GAMEPAD_B = 0x2000,
+	KGFW_GAMEPAD_X = 0x4000,
+	KGFW_GAMEPAD_Y = 0x8000,
+} kgfw_gamepad_button_enum;
+
+#if KGFW_DIRECTX == 11
+#define KGFW_GAMEPAD_MAX 4
+#else
+#define KGFW_GAMEPAD_MAX 16
+#endif
+
 typedef struct kgfw_gamepad_status {
 	float battery;
 	unsigned char connected;
 } kgfw_gamepad_status_t;
+
+typedef struct kgfw_gamepad_deadzone {
+	float lx;
+	float ly;
+	float rx;
+	float ry;
+} kgfw_gamepad_deadzone_t;
 
 typedef struct kgfw_gamepad {
 	unsigned short id;
@@ -153,6 +183,8 @@ typedef struct kgfw_gamepad {
 	float left_stick_y;
 	float right_stick_x;
 	float right_stick_y;
+	kgfw_gamepad_deadzone_t deadzone;
+	kgfw_gamepad_status_t status;
 } kgfw_gamepad_t;
 
 /* takes key value and action value (0: immediate keyup, 1: immediate keydown, 2: repeated keydown, 3: repeated keyup) */
@@ -160,6 +192,9 @@ typedef void (*kgfw_input_key_callback)(kgfw_input_key_enum key, unsigned char a
 
 /* takes key value and action value (0: immediate keyup, 1: immediate keydown, 2: repeated keydown, 3: repeated keyup) */
 typedef void (*kgfw_input_mouse_button_callback)(kgfw_input_mouse_button_enum buttom, unsigned char action);
+
+/* takes key value and action value (0: immediate keyup, 1: immediate keydown, 2: repeated keydown, 3: repeated keyup) */
+typedef void (*kgfw_input_gamepad_callback)(kgfw_gamepad_t * gamepad);
 
 KGFW_PUBLIC void kgfw_input_update(void);
 /* registers window input to redirect to main input */
@@ -182,8 +217,18 @@ KGFW_PUBLIC unsigned char kgfw_input_mouse_button(kgfw_input_mouse_button_enum b
 KGFW_PUBLIC int kgfw_input_key_register_callback(kgfw_input_key_callback callback);
 /* register a callback for mouse button input */
 KGFW_PUBLIC int kgfw_input_mouse_button_register_callback(kgfw_input_mouse_button_callback callback);
+/* register a callback for mouse gamepad input */
+KGFW_PUBLIC int kgfw_input_gamepad_register_callback(kgfw_input_gamepad_callback callback);
 
-KGFW_PUBLIC kgfw_gamepad_t * kgfw_input_gamepad_get(void);
+/*
+	if gamepad_id = 1..KGFW_GAMEPAD_MAX, it will return an address to the gamepad of the associated id or NULL if none found
+	if gamepad_id = 0 or >KGFW_GAMEPAD_MAX, it will return an address to the first connected gamepad
+*/
+KGFW_PUBLIC kgfw_gamepad_t * kgfw_input_gamepad_get(unsigned int gamepad_id);
+KGFW_PUBLIC unsigned char kgfw_input_gamepad_pressed(kgfw_gamepad_t * gamepad, unsigned short buttons);
+KGFW_PUBLIC unsigned char kgfw_input_gamepad_is_enabled(void);
+KGFW_PUBLIC void kgfw_input_gamepad_enable(void);
+KGFW_PUBLIC void kgfw_input_gamepad_disable(void);
 
 KGFW_PUBLIC void kgfw_input_press_key_down(kgfw_input_key_enum key);
 KGFW_PUBLIC void kgfw_input_press_key_up(kgfw_input_key_enum key);

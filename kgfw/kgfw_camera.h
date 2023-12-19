@@ -14,6 +14,8 @@ typedef struct kgfw_camera {
 	float fplane;
 	float ratio;
 	unsigned char ortho;
+	unsigned char tp;
+	vec3 focus;
 } kgfw_camera_t;
 
 void kgfw_camera_perspective(kgfw_camera_t * camera, mat4x4 outm);

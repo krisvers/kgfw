@@ -9,15 +9,17 @@
 
 static void kgfw_glfw_window_close(GLFWwindow * glfw_window);
 static void kgfw_glfw_window_resize(GLFWwindow * glfw_window, int width, int height);
+static void kgfw_glfw_window_focus(GLFWwindow * glfw_window, int focused);
 
 int kgfw_window_create(kgfw_window_t * out_window, unsigned int width, unsigned int height, char * title) {
 	out_window->width = width;
 	out_window->height = height;
 	out_window->closed = 0;
+	out_window->focused = 1;
+	out_window->disable_gamepad_on_unfocus = 1;
 	out_window->internal = NULL;
 
 	#if (KGFW_OPENGL == 33)
-
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -39,6 +41,7 @@ int kgfw_window_create(kgfw_window_t * out_window, unsigned int width, unsigned 
 	glfwSetWindowUserPointer(out_window->internal, (void *) out_window);
 	glfwSetWindowCloseCallback(out_window->internal, kgfw_glfw_window_close);
 	glfwSetWindowSizeCallback(out_window->internal, kgfw_glfw_window_resize);
+	glfwSetWindowFocusCallback(out_window->internal, kgfw_glfw_window_focus);
 	if (kgfw_input_register_window(out_window) != 0) {
 		glfwDestroyWindow(out_window->internal);
 		return 2;
@@ -80,6 +83,21 @@ static void kgfw_glfw_window_resize(GLFWwindow * glfw_window, int width, int hei
 	window->height = (unsigned int) height;
 }
 
+static void kgfw_glfw_window_focus(GLFWwindow * glfw_window, int focused) {
+	kgfw_window_t * window = glfwGetWindowUserPointer(glfw_window);
+	if (window == NULL) {
+		return;
+	}
+
+	window->focused = focused;
+	if (window->disable_gamepad_on_unfocus) {
+		if (focused) {
+			kgfw_input_gamepad_enable();
+		} else {
+			kgfw_input_gamepad_disable();
+		}
+	}
+}
 
 #elif (KGFW_DIRECTX == 11)
 
@@ -94,6 +112,8 @@ int kgfw_window_create(kgfw_window_t * out_window, unsigned int width, unsigned 
 	out_window->width = width;
 	out_window->height = height;
 	out_window->closed = 0;
+	out_window->focused = 1;
+	out_window->disable_gamepad_on_unfocus = 1;
 	out_window->internal = NULL;
 	
 	const char * class_name = "krisvers' window class";
@@ -211,6 +231,12 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
 		case WM_MOUSEMOVE:
 			kgfw_input_set_mouse_pos((float) GET_X_LPARAM(l), (float) GET_Y_LPARAM(l));
 			return 0;
+		case WM_KILLFOCUS:
+			kgfw_input_gamepad_disable();
+			break;
+		case WM_SETFOCUS:
+			kgfw_input_gamepad_enable();
+			break;
 	}
 
 	return DefWindowProcA(hwnd, msg, w, l);
