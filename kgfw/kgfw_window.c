@@ -42,6 +42,7 @@ int kgfw_window_create(kgfw_window_t * out_window, unsigned int width, unsigned 
 	glfwSetWindowCloseCallback(out_window->internal, kgfw_glfw_window_close);
 	glfwSetWindowSizeCallback(out_window->internal, kgfw_glfw_window_resize);
 	glfwSetWindowFocusCallback(out_window->internal, kgfw_glfw_window_focus);
+    glfwGetWindowContentScale(out_window->internal, &out_window->content_scale_x, &out_window->content_scale_y);
 	if (kgfw_input_register_window(out_window) != 0) {
 		glfwDestroyWindow(out_window->internal);
 		return 2;

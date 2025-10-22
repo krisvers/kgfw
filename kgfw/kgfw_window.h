@@ -10,6 +10,8 @@ typedef struct kgfw_window {
 	unsigned char disable_gamepad_on_unfocus;
 	unsigned int width;
 	unsigned int height;
+    float content_scale_x;
+    float content_scale_y;
 } kgfw_window_t;
 
 KGFW_PUBLIC int kgfw_window_create(kgfw_window_t * out_window, unsigned int width, unsigned int height, char * title);

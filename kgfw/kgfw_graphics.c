@@ -1,7 +1,7 @@
 #include "kgfw_defines.h"
 
 #if defined(KGFW_VULKAN)
-//#error Vulkan implementation is unsuitable for use
+#error Vulkan implementation is unsuitable for use
 
 #include "kgfw_graphics.h"
 #include "kgfw_camera.h"
@@ -659,6 +659,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(VkDebugUtilsMessageSever
 			sev = KGFW_LOG_SEVERITY_ERROR;
 			debug_state.exit = 1;
 			break;
+        default:
+            break;
 	}
 
 	char * t = (type == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) ? "general" : (type == VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) ? "violation" : (type == VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) ? "performance" : "unknown";
@@ -687,6 +689,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 	{
 		unsigned int extensions_count = 0;
+        unsigned int create_flags = 0;
 		const char ** extensions = NULL;
 		{
 			const char ** ext = glfwGetRequiredInstanceExtensions(&extensions_count);
@@ -710,7 +713,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 			#ifdef KGFW_APPLE_MACOS
 			KGFW_VK_SET_EXTENSION(KHR_PORTABILITY_ENUMERATION);
-			create_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+			create_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 			#endif
 
 			#ifdef KGFW_DEBUG
@@ -738,16 +741,14 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 		VkInstanceCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-			.pNext = NULL, 0,
+			.pNext = NULL,
+            .flags = create_flags,
 			.pApplicationInfo = &app_info,
 			.enabledLayerCount = 0,
 			.ppEnabledLayerNames = NULL,
-			.enabledExtensionCount = 0,
-			.ppEnabledExtensionNames = NULL,
+			.enabledExtensionCount = extensions_count,
+			.ppEnabledExtensionNames = extensions,
 		};
-
-		create_info.enabledExtensionCount = extensions_count;
-		create_info.ppEnabledExtensionNames = extensions;
 
 		#ifdef KGFW_DEBUG
 		{
@@ -984,8 +985,8 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			if (state.vk.capabilities.currentExtent.width != UINT32_MAX) {
 				state.vk.extent = state.vk.capabilities.currentExtent;
 			} else {
-				state.vk.extent.width = state.window->width;
-				state.vk.extent.height = state.window->height;
+				state.vk.extent.width = state.window->width * state.window->content_scale_x;
+				state.vk.extent.height = state.window->height * state.window->content_scale_y;
 
 				state.vk.extent.width = (state.vk.extent.width < state.vk.capabilities.minImageExtent.width) ? state.vk.capabilities.minImageExtent.width : (state.vk.extent.width < state.vk.capabilities.maxImageExtent.width) ? state.vk.capabilities.maxImageExtent.width : state.vk.extent.width;
 				state.vk.extent.height = (state.vk.extent.height < state.vk.capabilities.minImageExtent.height) ? state.vk.capabilities.minImageExtent.height : (state.vk.extent.height < state.vk.capabilities.maxImageExtent.height) ? state.vk.capabilities.maxImageExtent.height : state.vk.extent.height;
@@ -1018,7 +1019,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 			.pNext = NULL,
 			.flags = 0,
-			.queueCreateInfoCount = 2,
+			.queueCreateInfoCount = (queue_create_infos[1].queueFamilyIndex == queue_create_infos[0].queueFamilyIndex) ? 1 : 2,
 			.pQueueCreateInfos = queue_create_infos,
 			.enabledLayerCount = 0,
 			.ppEnabledLayerNames = NULL,
@@ -1049,6 +1050,9 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 			const char * required[] = {
 				VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                #ifdef KGFW_APPLE_MACOS
+                "VK_KHR_portability_subset",
+                #endif
 			};
 			unsigned int unfound = sizeof(required) / sizeof(const char *);
 
@@ -1091,7 +1095,11 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 		});
 
 		vkGetDeviceQueue(state.vk.dev, state.vk.queue_families.graphics, 0, &state.vk.gfx_queue);
-		vkGetDeviceQueue(state.vk.dev, state.vk.queue_families.present, 0, &state.vk.pres_queue);
+        if (state.vk.queue_families.present == state.vk.queue_families.graphics) {
+            state.vk.pres_queue = state.vk.gfx_queue;
+        } else {
+		    vkGetDeviceQueue(state.vk.dev, state.vk.queue_families.present, 0, &state.vk.pres_queue);
+        }
 	}
 
 	int ret = shaders_load("assets/shaders/vertex.spv", "assets/shaders/fragment.spv", &state.vk.shaders.vshader, &state.vk.shaders.fshader);
@@ -1744,7 +1752,7 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 		VkDeviceSize isize = sizeof(unsigned int) * node->vk.ibo_size;
 		if (buffer_create(vsize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging, &staging_mem) != 0) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan staging buffer");
-			return 15;
+			return NULL;
 		}
 
 		void * data;
@@ -1754,19 +1762,19 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 
 		if (buffer_create(vsize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &node->vk.vbuf, &node->vk.vmem) != 0) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan vertex buffer");
-			return 15;
+			return NULL;
 		}
 
 		if (buffer_copy(node->vk.vbuf, staging, vsize, 0) != 0) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to copy Vulkan staging buffer to mesh buffer");
-			return 15;
+			return NULL;
 		}
 
 		buffer_destroy(&staging, &staging_mem);
 
 		if (buffer_create(isize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging, &staging_mem) != 0) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan staging buffer");
-			return 15;
+			return NULL;
 		}
 
 		vkMapMemory(state.vk.dev, staging_mem, 0, isize, 0, &data);
@@ -1775,12 +1783,12 @@ kgfw_graphics_mesh_node_t * kgfw_graphics_mesh_new(kgfw_graphics_mesh_t * mesh, 
 
 		if (buffer_create(isize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &node->vk.ibuf, &node->vk.imem) != 0) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to create Vulkan vertex buffer");
-			return 15;
+			return NULL;
 		}
 
 		if (buffer_copy(node->vk.ibuf, staging, isize, 0) != 0) {
 			kgfw_logf(KGFW_LOG_SEVERITY_ERROR, "Failed to copy Vulkan staging buffer to index buffer");
-			return 15;
+			return NULL;
 		}
 
 		buffer_destroy(&staging, &staging_mem);
@@ -2387,7 +2395,7 @@ int kgfw_graphics_init(kgfw_window_t * window, kgfw_camera_t * camera) {
 
 	if (window != NULL) {
 		if (window->internal != NULL) {
-			GL_CALL(glViewport(0, 0, window->width, window->height));
+			GL_CALL(glViewport(0, 0, window->width * window->content_scale_x, window->height * window->content_scale_y));
 		}
 	}
 
@@ -2575,12 +2583,12 @@ void kgfw_graphics_set_window(kgfw_window_t * window) {
 		if (window->internal != NULL) {
 			glfwMakeContextCurrent(window->internal);
 		}
-		GL_CALL(glViewport(0, 0, window->width, window->height));
+		GL_CALL(glViewport(0, 0, window->width * window->content_scale_x, window->height * window->content_scale_y));
 	}
 }
 
 void kgfw_graphics_viewport(unsigned int width, unsigned int height) {
-	GL_CALL(glViewport(0, 0, width, height));
+	GL_CALL(glViewport(0, 0, width * state.window->content_scale_x, height * state.window->content_scale_y));
 }
 
 kgfw_window_t * kgfw_graphics_get_window(void) {

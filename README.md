@@ -1,6 +1,9 @@
 ![kgfw logo](./rsrc/kgfw.png)
 ## A simple game framework written solely in C
 
+### Example Game
+![sample](./rsrc/sample.png)
+
 ### Supported Platforms:
 
 |  Symbol  |        Meaning       |

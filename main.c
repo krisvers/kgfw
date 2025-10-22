@@ -10,6 +10,15 @@
 #ifndef KGFW_WINDOWS
 #include <unistd.h>
 #endif
+
+#ifndef min
+#define min(a_, b_) (((a_) < (b_)) ? (a_) : (b_))
+#endif
+
+#ifndef max
+#define max(a_, b_) (((a_) > (b_)) ? (a_) : (b_))
+#endif
+
 #include <linmath.h>
 
 struct {
@@ -138,7 +147,7 @@ int main(int argc, char ** argv) {
 	}
 	#endif
 
-	if (kgfw_window_create(&state.window, 800, 600, "hello, worl") != 0) {
+	if (kgfw_window_create(&state.window, 800, 600, "KGFW Racing Game") != 0) {
 		kgfw_deinit();
 		return 2;
 	}
@@ -237,7 +246,7 @@ int main(int argc, char ** argv) {
 			return 99;
 		}
 
-		player_component = kgfw_entity_attach_component(player, pc_id);
+		player_component = (player_t *) kgfw_entity_attach_component(player, pc_id);
 		player_component->camera = &state.camera;
 		
 		kgfw_graphics_mesh_t * m = mesh_get("forklift");
